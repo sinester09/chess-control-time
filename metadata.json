@@ -1,0 +1,5 @@
+{
+  "name": "TaskFlow: Chess Clock Timer",
+  "description": "A productivity application that combines a chess-clock style task timer with active pause reminders to help you stay focused and healthy. Manage tasks, track time, earn points for efficiency, and get reminded to take breaks.",
+  "requestFramePermissions": []
+}
