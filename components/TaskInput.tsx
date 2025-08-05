@@ -25,7 +25,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
         type="text"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="New task name..."
+        placeholder="Nuevo nombre de tarea..."
         className="flex-grow bg-slate-700 border border-slate-600 rounded-md px-4 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition"
         required
       />
@@ -33,14 +33,14 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
         type="number"
         value={minutes}
         onChange={(e) => setMinutes(e.target.value)}
-        placeholder="Est. minutes"
+        placeholder="Est. minutos"
         className="w-full sm:w-36 bg-slate-700 border border-slate-600 rounded-md px-4 py-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition"
         min="1"
         required
       />
       <button type="submit" className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105">
         <PlusIcon className="w-5 h-5" />
-        <span>Add Task</span>
+        <span>Agregar tarea</span>
       </button>
     </form>
   );

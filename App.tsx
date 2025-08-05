@@ -39,44 +39,61 @@ const App: React.FC = () => {
   // Estado para el menú desplegable
   const [showMenu, setShowMenu] = useState<boolean>(false);
 
-  // Use a ref to give the setInterval callback access to the latest tasks state
-  // without including it in the useEffect dependency array.
+  // Ref para mantener el estado actualizado de las tareas (si es necesario)
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
 
-  // Main task timer effect
+  // Ref para el timer
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Main task timer effect - ULTRA LIMPIO
   useEffect(() => {
+    // Limpiar timer anterior si existe
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
     if (!isDayStarted) return;
 
-    const timer = setInterval(() => {
-      // Read the latest tasks from the ref
-      const currentTasks = tasksRef.current;
-      const activeTask = currentTasks.find(task => task.isActive && !task.isCompleted);
-
-      if (activeTask) {
-        // Increment total work time if a task is active
-        setTotalWorkTime(prev => prev + 1);
-
-        // Increment elapsed time for the specific active task
-        setTasks(prevTasks =>
-          prevTasks.map(task => {
+    timerRef.current = setInterval(() => {
+      setTasks(prevTasks => {
+        const activeTask = prevTasks.find(task => task.isActive && !task.isCompleted);
+        
+        if (activeTask) {
+          // Actualizar tiempo total de trabajo (1 segundo por tick)
+          setTotalWorkTime(prev => prev + 1);
+          
+          // Actualizar tareas con 1 segundo adicional
+          return prevTasks.map(task => {
             if (task.id === activeTask.id) {
               const newElapsedTime = task.elapsedTime + 1;
-              // Usar la tolerancia configurada antes de mostrar la alerta
+              
+              // Verificar si se excedió el tiempo estimado
+              console.log(newElapsedTime);
               if (newElapsedTime > (task.estimatedTime + settings.toleranceTime) && !task.timeExceededNotified) {
                 const toleranceMinutes = Math.floor(settings.toleranceTime / 60);
-                alert(`Task "${task.name}" has exceeded its estimated time by more than ${toleranceMinutes} minutes!`);
+                setTimeout(() => {
+                  alert(`Task "${task.name}" has exceeded its estimated time by more than ${toleranceMinutes} minutes!`);
+                }, 0);
                 return { ...task, elapsedTime: newElapsedTime, timeExceededNotified: true };
               }
+              
               return { ...task, elapsedTime: newElapsedTime };
             }
             return task;
-          })
-        );
-      }
+          });
+        }
+        
+        return prevTasks; // No hay tarea activa, no cambiar nada
+      });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [isDayStarted, settings.toleranceTime]);
 
   // Effect to show settings modal on first load if workday is not set
@@ -98,7 +115,6 @@ const App: React.FC = () => {
       setShowPauseReminder(true);
     }
   }, [totalWorkTime, activePauses, isDayStarted, showPauseReminder, snoozeUntil, settings.pauseInterval]);
-
 
   const handleAddTask = (name: string, estimatedTime: number) => {
     const now = Date.now();
@@ -344,113 +360,180 @@ const App: React.FC = () => {
       ) : (
         <main className="min-h-screen p-4 sm:p-8 bg-gradient-to-br from-slate-900 to-slate-800">
           <div className="max-w-3xl mx-auto">
-            <header className="relative text-center mb-8 h-20 sm:h-auto">
-              <div className="absolute top-0 right-0 flex items-center gap-2">
-                {isDayStarted && (
-                  <button 
-                    onClick={handleEndDay} 
-                    className="flex items-center gap-2 p-2 px-3 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg transition-colors duration-200"
-                    aria-label="End workday"
-                  >
-                    <StopCircleIcon className="w-6 h-6" />
-                    <span className="hidden sm:inline">End Day</span>
-                  </button>
-                )}
-                {isDayStarted && (
-                  <button
-                    onClick={toggleFocusMode}
-                    className="flex items-center gap-2 p-2 px-3 bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-400 rounded-lg transition-colors duration-200"
-                    aria-label="Focus mode"
-                  >
-                    <FocusIcon className="w-6 h-6" />
-                    <span className="hidden sm:inline">Focus Mode</span>
-                  </button>
-                )}
-                {workDay && (
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={handleExportData} 
-                      className="p-2 text-slate-400 hover:text-cyan-400 transition-colors duration-200"
-                      aria-label="Export data"
-                      title="Export data"
-                    >
-                      <DownloadIcon className="w-6 h-6" />
-                    </button>
-                    <button 
-                      onClick={triggerFileInput} 
-                      className="p-2 text-slate-400 hover:text-cyan-400 transition-colors duration-200"
-                      aria-label="Import data"
-                      title="Import data"
-                    >
-                      <UploadIcon className="w-6 h-6" />
-                    </button>
-                    <button 
-                      onClick={() => setShowAdvancedSettings(true)} 
-                      className="p-2 text-slate-400 hover:text-cyan-400 transition-colors duration-200"
-                      aria-label="Advanced settings"
-                      title="Advanced settings"
-                    >
-                      <SettingsIcon className="w-6 h-6" />
-                    </button>
-                    <button 
-                      onClick={() => setShowSettingsModal(true)} 
-                      className="p-2 text-slate-400 hover:text-cyan-400 transition-colors duration-200"
-                      aria-label="Work hours settings"
-                      title="Work hours settings"
-                    >
-                      <SettingsIcon className="w-7 h-7" />
-                    </button>
-                    <button
-                      onClick={() => setShowMenu(!showMenu)}
-                      className="p-2 text-slate-400 hover:text-cyan-400 transition-colors duration-200"
-                      aria-label="Menu"
-                      title="Menu"
-                    >
-                      <MenuIcon className="w-6 h-6" />
-                    </button>
-                    
-                    {showMenu && (
-                      <div className="absolute right-0 top-10 mt-2 w-48 bg-slate-800 rounded-md shadow-lg py-1 z-20 border border-slate-700">
-                        <button
-                          onClick={() => {
-                            setShowMenu(false);
-                            handleExportData();
-                          }}
-                          className="flex items-center w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
-                        >
-                          <DownloadIcon className="w-4 h-4 mr-2" />
-                          Export data
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowMenu(false);
-                            triggerFileInput();
-                          }}
-                          className="flex items-center w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
-                        >
-                          <UploadIcon className="w-4 h-4 mr-2" />
-                          Import data
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowAdvancedSettings(true);
-                            setShowMenu(false);
-                          }}
-                          className="flex items-center w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
-                        >
-                          <SettingsIcon className="w-4 h-4 mr-2" />
-                          Advanced settings
-                        </button>
-                      </div>
-                    )}
+        <header className="relative text-center mb-8 h-20 sm:h-auto">
+  <div className="absolute top-0 right-0 flex items-center gap-3">
+    {isDayStarted && (
+      <button 
+        onClick={handleEndDay} 
+        className="group flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 border border-red-500/30 hover:border-red-400/50 text-red-300 hover:text-red-200 rounded-xl transition-all duration-300 font-medium text-sm backdrop-blur-sm shadow-lg hover:shadow-red-500/10"
+        aria-label="End workday"
+      >
+        <StopCircleIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+        <span className="hidden sm:inline">Finalizar Día</span>
+      </button>
+    )}
+    
+    {isDayStarted && (
+      <button
+        onClick={toggleFocusMode}
+        className="group flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500/10 to-purple-600/10 hover:from-indigo-500/20 hover:to-purple-600/20 border border-indigo-500/30 hover:border-indigo-400/50 text-indigo-300 hover:text-indigo-200 rounded-xl transition-all duration-300 font-medium text-sm backdrop-blur-sm shadow-lg hover:shadow-indigo-500/10"
+        aria-label="Focus mode"
+      >
+        <FocusIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+        <span className="hidden sm:inline">Modo Enfoque</span>
+      </button>
+    )}
+    
+    {workDay && (
+      <div className="flex items-center gap-2">
+        {/* Botones de acción rápida */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-800/60 backdrop-blur-sm border border-slate-600/30 rounded-xl">
+          <button 
+            onClick={handleExportData} 
+            className="group p-2 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-all duration-200"
+            aria-label="Export data"
+            title="Exportar datos"
+          >
+            <DownloadIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+          </button>
+          
+          <button 
+            onClick={triggerFileInput} 
+            className="group p-2 text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-all duration-200"
+            aria-label="Import data"
+            title="Importar datos"
+          >
+            <UploadIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+          </button>
+          
+          <div className="w-px h-6 bg-slate-600/50"></div>
+          
+          <button 
+            onClick={() => setShowAdvancedSettings(true)} 
+            className="group p-2 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-all duration-200"
+            aria-label="Advanced settings"
+            title="Configuración avanzada"
+          >
+            <SettingsIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+          </button>
+          
+          <button 
+            onClick={() => setShowSettingsModal(true)} 
+            className="group p-2 text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-all duration-200"
+            aria-label="Work hours settings"
+            title="Horario de trabajo"
+          >
+            <SettingsIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+          </button>
+        </div>
+        
+        {/* Botón de menú mejorado */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className={`group p-3 rounded-xl transition-all duration-300 backdrop-blur-sm shadow-lg ${
+              showMenu 
+                ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 border border-cyan-400/40 text-cyan-200' 
+                : 'bg-slate-800/60 border border-slate-600/30 text-slate-300 hover:bg-slate-700/60 hover:border-slate-500/40 hover:text-cyan-300'
+            }`}
+            aria-label="Menu"
+            title="Menú"
+          >
+            <MenuIcon className={`w-6 h-6 transition-all duration-300 ${showMenu ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`} />
+          </button>
+          
+          {showMenu && (
+            <>
+              {/* Overlay para cerrar el menú */}
+              <div 
+                className="fixed inset-0 z-10" 
+                onClick={() => setShowMenu(false)}
+              ></div>
+              
+              {/* Menú desplegable mejorado */}
+              <div className="absolute right-0 top-full mt-3 w-64 bg-slate-800/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-600/30 py-2 z-20 animate-in slide-in-from-top-2 duration-200">
+                <div className="px-4 py-2 border-b border-slate-600/20">
+                  <h3 className="text-sm font-semibold text-slate-200">Acciones Rápidas</h3>
+                </div>
+                
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    handleExportData();
+                  }}
+                  className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-cyan-300 transition-colors duration-200 group"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-cyan-500/10 rounded-lg mr-3 group-hover:bg-cyan-500/20 transition-colors duration-200">
+                    <DownloadIcon className="w-4 h-4 text-cyan-400" />
                   </div>
-                )}
+                  <div>
+                    <div className="font-medium">Exportar datos</div>
+                    <div className="text-xs text-slate-500">Descargar respaldo en JSON</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    triggerFileInput();
+                  }}
+                  className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-emerald-300 transition-colors duration-200 group"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 rounded-lg mr-3 group-hover:bg-emerald-500/20 transition-colors duration-200">
+                    <UploadIcon className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Importar datos</div>
+                    <div className="text-xs text-slate-500">Cargar respaldo desde archivo</div>
+                  </div>
+                </button>
+                
+                <div className="h-px bg-slate-600/20 mx-4 my-2"></div>
+                
+                <button
+                  onClick={() => {
+                    setShowAdvancedSettings(true);
+                    setShowMenu(false);
+                  }}
+                  className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-amber-300 transition-colors duration-200 group"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-amber-500/10 rounded-lg mr-3 group-hover:bg-amber-500/20 transition-colors duration-200">
+                    <SettingsIcon className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Configuración avanzada</div>
+                    <div className="text-xs text-slate-500">Personalizar comportamiento</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowSettingsModal(true);
+                    setShowMenu(false);
+                  }}
+                  className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-blue-300 transition-colors duration-200 group"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-blue-500/10 rounded-lg mr-3 group-hover:bg-blue-500/20 transition-colors duration-200">
+                    <SettingsIcon className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Horario de trabajo</div>
+                    <div className="text-xs text-slate-500">Configurar horas laborales</div>
+                  </div>
+                </button>
               </div>
-              <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-lime-400 pb-2 pt-8 sm:pt-0">
-                TaskFlow
-              </h1>
-              <p className="text-slate-400">Your Chess Clock for Productivity</p>
-            </header>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+  
+  <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-lime-400 pb-2 pt-8 sm:pt-0">
+ALO-TASK-CONTROL
+  </h1>
+  <p className="text-slate-400">Controlador de reloj para productividad</p>
+</header>
             
             {isDayStarted ? (
               <>

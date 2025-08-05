@@ -2,12 +2,27 @@ import React from 'react';
 import { Task } from '../types';
 import { TrophyIcon, CoffeeIcon, ClockIcon } from './icons';
 
-// Función para formatear segundos en formato HH:MM:SS
-const formatWorkTime = (totalSeconds: number): string => {
+// Función para formatear segundos en formato HH:MM:SS para el tiempo activo
+const formatActiveTime = (totalSeconds: number): string => {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+// Función para formatear tiempo en formato legible (ej: "2h 15m 30s")
+const formatReadableTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${remainingSeconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  } else {
+    return `${remainingSeconds}s`;
+  }
 };
 
 interface StatsDisplayProps {
@@ -18,25 +33,13 @@ interface StatsDisplayProps {
 }
 
 const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, totalWorkTime, tasks = [] }) => {
-  // Función para formatear el tiempo de trabajo
-  const formatWorkTime = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${remainingSeconds}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${remainingSeconds}s`;
-    } else {
-      return `${remainingSeconds}s`;
-    }
-  };
-
   // Calcular estadísticas adicionales
   const completedTasks = tasks.filter(task => task.isCompleted).length;
   const totalTasks = tasks.length;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  
+  // Encontrar la tarea activa actual
+  const activeTask = tasks.find(task => task.isActive && !task.isCompleted);
   
   // Calcular tiempo promedio por tarea completada
   const completedTasksArray = tasks.filter(task => task.isCompleted);
@@ -44,8 +47,8 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, total
     ? Math.round(completedTasksArray.reduce((sum, task) => sum + task.elapsedTime, 0) / completedTasksArray.length)
     : 0;
   
-  // Calcular tiempo de pausa estimado (asumiendo que cada pausa dura aproximadamente 5 minutos)
-  const estimatedPauseTime = activePauses * 5 * 60; // en segundos
+  // Calcular tiempo de pausa estimado (asumiendo que cada pausa dura aproximadamente 15 minutos)
+  const estimatedPauseTime = activePauses * 15 * 60; // en segundos
 
   return (
     <div className="flex flex-col gap-4 mb-6">
@@ -60,15 +63,21 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, total
           </div>
           <div className="flex flex-col items-center p-3 bg-slate-700/50 rounded-lg w-full sm:w-1/3">
             <ClockIcon className="w-10 h-10 text-cyan-400 mb-2" />
-            <span className="text-3xl font-bold font-mono">{formatWorkTime(totalWorkTime)}</span>
+            <span className="text-3xl font-bold font-mono">
+              {activeTask ? formatActiveTime(activeTask.elapsedTime) : "--:--:--"}
+            </span>
             <span className="text-sm text-slate-400">Tiempo Activo</span>
-            <span className="text-xs text-slate-500 mt-1">Promedio: {formatWorkTime(avgTimePerTask)}/tarea</span>
+            <span className="text-xs text-slate-500 mt-1">
+              Promedio: {completedTasksArray.length > 0 ? formatActiveTime(avgTimePerTask) : "--:--:--"}/tarea
+            </span>
           </div>
           <div className="flex flex-col items-center p-3 bg-slate-700/50 rounded-lg w-full sm:w-1/3">
             <CoffeeIcon className="w-10 h-10 text-lime-400 mb-2" />
             <span className="text-3xl font-bold">{activePauses}</span>
             <span className="text-sm text-slate-400">Pausas Tomadas</span>
-            <span className="text-xs text-slate-500 mt-1">Tiempo: ~{formatWorkTime(estimatedPauseTime)}</span>
+            <span className="text-xs text-slate-500 mt-1">
+              Tiempo: {activePauses > 0 ? `~${formatReadableTime(estimatedPauseTime)}` : "--"}
+            </span>
           </div>
         </div>
       </div>
@@ -80,15 +89,19 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, total
             <h4 className="text-sm font-medium text-slate-300 mb-2">Tiempo de Trabajo</h4>
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs text-slate-400">Tiempo total:</span>
-              <span className="text-sm font-medium text-white">{formatWorkTime(totalWorkTime)}</span>
+              <span className="text-sm font-medium text-white">{formatReadableTime(totalWorkTime)}</span>
             </div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs text-slate-400">Tiempo promedio por tarea:</span>
-              <span className="text-sm font-medium text-white">{formatWorkTime(avgTimePerTask)}</span>
+              <span className="text-sm font-medium text-white">
+                {completedTasksArray.length > 0 ? formatReadableTime(avgTimePerTask) : "--"}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-xs text-slate-400">Tiempo estimado de pausas:</span>
-              <span className="text-sm font-medium text-white">{formatWorkTime(estimatedPauseTime)}</span>
+              <span className="text-sm font-medium text-white">
+                {activePauses > 0 ? formatReadableTime(estimatedPauseTime) : "--"}
+              </span>
             </div>
           </div>
           

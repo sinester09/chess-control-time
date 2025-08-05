@@ -47,8 +47,8 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-slate-800 border border-cyan-500 rounded-lg shadow-2xl p-8 max-w-md w-full transform transition-all scale-100 opacity-100">
-        <h2 className="text-2xl font-bold text-white mb-4">Advanced Settings</h2>
-        <p className="text-slate-300 mb-6">Customize your TaskFlow experience.</p>
+        <h2 className="text-2xl font-bold text-white mb-4">Configuración Avanzada</h2>
+        <p className="text-slate-300 mb-6">Personaliza la experiencia de TaskFlow.</p>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <label htmlFor="tolerance-time" className="text-slate-200 font-medium">Time Tolerance (minutes)</label>
@@ -73,7 +73,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             />
           </div>
           <div className="flex items-center justify-between">
-            <label htmlFor="pause-duration" className="text-slate-200 font-medium">Recommended Pause Duration (minutes)</label>
+            <label htmlFor="pause-duration" className="text-slate-200 font-medium">Duración de Pausa (minutos)</label>
             <input
               type="number"
               id="pause-duration"
@@ -84,7 +84,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             />
           </div>
           <div className="flex items-center justify-between">
-            <label htmlFor="snooze-duration" className="text-slate-200 font-medium">Snooze Duration (minutes)</label>
+            <label htmlFor="snooze-duration" className="text-slate-200 font-medium">Duración de pausa (minutes)</label>
             <input
               type="number"
               id="snooze-duration"
@@ -95,7 +95,7 @@ const AdvancedSettingsModal: React.FC<AdvancedSettingsModalProps> = ({
             />
           </div>
           <div className="flex items-center justify-between">
-            <label htmlFor="pomodoro-timer" className="text-slate-200 font-medium">Pomodoro Timer (minutes)</label>
+            <label htmlFor="pomodoro-timer" className="text-slate-200 font-medium"> Timer (minutes)</label>
             <input
               type="number"
               id="pomodoro-timer"

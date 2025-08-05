@@ -15,8 +15,8 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onComplete, onDele
   if (tasks.length === 0) {
     return (
       <div className="text-center py-10 px-4 bg-slate-800/50 rounded-lg">
-        <h3 className="text-lg font-semibold text-slate-300">No tasks yet!</h3>
-        <p className="text-slate-400">Add a task above to get started.</p>
+        <h3 className="text-lg font-semibold text-slate-300">No hay tareas por hacer!</h3>
+        <p className="text-slate-400">Agrega una tarea para comenzar.</p>
       </div>
     );
   }

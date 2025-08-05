@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Task } from '../types';
 import { PlayIcon, PauseIcon, CheckIcon, TrashIcon, ClockIcon } from './icons';
@@ -25,11 +24,15 @@ interface TaskItemProps {
 }
 
 const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelete, toleranceTime = 300 }) => {
-  const isOverTime = task.elapsedTime > (task.estimatedTime + toleranceTime) && task.estimatedTime > 0;
-  const progressPercentage = task.estimatedTime > 0 ? Math.min((task.elapsedTime / task.estimatedTime) * 100, 100) : 0;
+  // Asegurar que los valores sean números válidos
+  const elapsedTime = Math.max(0, Math.floor(task.elapsedTime || 0));
+  const estimatedTime = Math.max(0, Math.floor(task.estimatedTime || 0));
   
-  // Calcular el tiempo restante
-  const remainingTime = task.estimatedTime - task.elapsedTime;
+  const isOverTime = elapsedTime > (estimatedTime + toleranceTime) && estimatedTime > 0;
+  const progressPercentage = estimatedTime > 0 ? Math.min((elapsedTime / estimatedTime) * 100, 100) : 0;
+  
+  // Calcular el tiempo restante de forma más precisa
+  const remainingTime = Math.max(0, estimatedTime - elapsedTime);
   const isNearingDeadline = remainingTime > 0 && remainingTime <= 300; // 5 minutos o menos
 
   const baseClasses = "relative p-4 mb-3 rounded-lg shadow-md transition-all duration-300 overflow-hidden";
@@ -53,7 +56,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelet
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                         <p className={`text-sm font-mono ${isOverTime ? 'text-red-400 font-bold' : isNearingDeadline ? 'text-yellow-400 font-bold' : 'text-slate-400'}`}>
-                            {formatTime(task.elapsedTime)} / {formatTime(task.estimatedTime)}
+                            {formatTime(elapsedTime)} / {formatTime(estimatedTime)}
                         </p>
                         {!task.isCompleted && remainingTime > 0 && (
                             <div className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-slate-700">
@@ -63,11 +66,25 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelet
                                 </span>
                             </div>
                         )}
+                        {!task.isCompleted && remainingTime === 0 && estimatedTime > 0 && (
+                            <div className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-red-800">
+                                <ClockIcon className="w-3 h-3 text-red-400" />
+                                <span className="text-red-400">
+                                    Time's up!
+                                </span>
+                            </div>
+                        )}
+                        {task.isActive && (
+                            <div className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 bg-green-700">
+                                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                <span className="text-green-400">Running</span>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                         <span>Creada: {formatTimestamp(task.createdAt)}</span>
                         {task.isCompleted && task.completedAt && (
-                            <span>Completada: {formatTimestamp(task.completedAt)}</span>
+                            <span>• Completada: {formatTimestamp(task.completedAt)}</span>
                         )}
                     </div>
                 </div>
@@ -76,15 +93,31 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelet
             <div className="flex items-center gap-2">
                 {!task.isCompleted && (
                     <>
-                        <button onClick={() => onToggle(task.id)} className={`p-2 rounded-full transition-colors duration-200 ${task.isActive ? 'bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400' : 'bg-green-500/20 hover:bg-green-500/40 text-green-400'}`}>
+                        <button 
+                            onClick={() => onToggle(task.id)} 
+                            className={`p-2 rounded-full transition-colors duration-200 ${
+                                task.isActive 
+                                    ? 'bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400' 
+                                    : 'bg-green-500/20 hover:bg-green-500/40 text-green-400'
+                            }`}
+                            title={task.isActive ? 'Pause task' : 'Start task'}
+                        >
                             {task.isActive ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
                         </button>
-                        <button onClick={() => onComplete(task.id)} className="p-2 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 transition-colors duration-200">
+                        <button 
+                            onClick={() => onComplete(task.id)} 
+                            className="p-2 rounded-full bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 transition-colors duration-200"
+                            title="Complete task"
+                        >
                             <CheckIcon className="w-6 h-6" />
                         </button>
                     </>
                 )}
-                <button onClick={() => onDelete(task.id)} className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors duration-200">
+                <button 
+                    onClick={() => onDelete(task.id)} 
+                    className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors duration-200"
+                    title="Delete task"
+                >
                     <TrashIcon className="w-6 h-6" />
                 </button>
             </div>
