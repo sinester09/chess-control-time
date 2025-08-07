@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Task, Settings } from './types';
+import { Task, Settings } from './types'; // Asumo que `types.ts` contiene la interfaz Task
 import TaskInput from './components/TaskInput';
 import TaskList from './components/TaskList';
 import StatsDisplay from './components/StatsDisplay';
@@ -8,7 +8,7 @@ import SettingsModal from './components/SettingsModal';
 import AdvancedSettingsModal from './components/AdvancedSettingsModal';
 import StartDayScreen from './components/StartDayScreen';
 import FocusMode from './components/FocusMode';
-import { SettingsIcon, StopCircleIcon, DownloadIcon, UploadIcon, PlayCircleIcon, FocusIcon, MenuIcon } from './components/icons';
+import { SettingsIcon, StopCircleIcon, DownloadIcon, UploadIcon, PlayCircleIcon, FocusIcon, MenuIcon, LogOutIcon, LogoEmpresas } from './components/icons';
 
 const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -39,62 +39,71 @@ const App: React.FC = () => {
   // Estado para el menú desplegable
   const [showMenu, setShowMenu] = useState<boolean>(false);
 
-  // Ref para mantener el estado actualizado de las tareas (si es necesario)
-  const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
-
   // Ref para el timer
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Main task timer effect - ULTRA LIMPIO
+  // Main task timer effect - Lógica de tiempo corregida
   useEffect(() => {
-    // Limpiar timer anterior si existe
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    if (!isDayStarted) {
+      // Limpiar el intervalo cuando el día no ha comenzado
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
     }
 
-    if (!isDayStarted) return;
-
+    // El temporizador ahora simplemente incrementa el tiempo de la tarea activa cada segundo
     timerRef.current = setInterval(() => {
       setTasks(prevTasks => {
-        const activeTask = prevTasks.find(task => task.isActive && !task.isCompleted);
-        
-        if (activeTask) {
-          // Actualizar tiempo total de trabajo (1 segundo por tick)
-          setTotalWorkTime(prev => prev + 1);
-          
-          // Actualizar tareas con 1 segundo adicional
+        const newTasks = prevTasks.map(task => {
+          if (task.isActive && !task.isCompleted) {
+            // Incrementa elapsedTime en 1 segundo
+            return { ...task, elapsedTime: task.elapsedTime + 1 };
+          }
+          return task;
+        });
+
+        // Actualiza el totalWorkTime sumando los elapsedTimes de las tareas activas
+        // Esto podría ser más complejo si quieres el tiempo de "trabajo efectivo"
+        // Aquí simplemente sumamos el tiempo de todas las tareas activas para el display
+        const currentTotalWorkTime = newTasks.reduce((sum, task) => sum + task.elapsedTime, 0);
+        setTotalWorkTime(currentTotalWorkTime); // Asegúrate de que totalWorkTime se actualice correctamente
+
+        return newTasks;
+      });
+    }, 1000);
+
+    // Manejar cuando la app vuelve del background
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setTasks(prevTasks => {
           return prevTasks.map(task => {
-            if (task.id === activeTask.id) {
-              const newElapsedTime = task.elapsedTime + 1;
-              
-              // Verificar si se excedió el tiempo estimado
-              console.log(newElapsedTime);
-              if (newElapsedTime > (task.estimatedTime + settings.toleranceTime) && !task.timeExceededNotified) {
-                const toleranceMinutes = Math.floor(settings.toleranceTime / 60);
-                setTimeout(() => {
-                  alert(`Task "${task.name}" has exceeded its estimated time by more than ${toleranceMinutes} minutes!`);
-                }, 0);
-                return { ...task, elapsedTime: newElapsedTime, timeExceededNotified: true };
-              }
-              
-              return { ...task, elapsedTime: newElapsedTime };
+            if (task.isActive && !task.isCompleted && task.lastActiveTime) {
+              // Calcula el tiempo que la tarea estuvo activa mientras la app estaba en segundo plano
+              const timeInBackground = Math.floor((Date.now() - task.lastActiveTime) / 1000);
+              return {
+                ...task,
+                elapsedTime: task.elapsedTime + timeInBackground,
+                lastActiveTime: Date.now() // Actualiza lastActiveTime a ahora para futuras pausas/cambios
+              };
             }
             return task;
           });
-        }
-        
-        return prevTasks; // No hay tarea activa, no cambiar nada
-      });
-    }, 1000);
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isDayStarted, settings.toleranceTime]);
+  }, [isDayStarted]); // El efecto se reinicia si el día comienza o termina
 
   // Effect to show settings modal on first load if workday is not set
   useEffect(() => {
@@ -126,30 +135,71 @@ const App: React.FC = () => {
       isActive: false,
       isCompleted: false,
       timeExceededNotified: false,
-      createdAt: now
+      createdAt: now,
+      // No se establece lastActiveTime aquí, se establece cuando se activa la tarea
     };
     setTasks(prevTasks => [...prevTasks, newTask]);
   };
 
   const handleToggleTask = useCallback((id: number) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task => {
-        if (task.isCompleted) return task;
-        if (task.id === id) {
-          return { ...task, isActive: !task.isActive };
+    const now = Date.now(); // Captura el tiempo actual una vez
+    setTasks(prevTasks => {
+      return prevTasks.map(task => {
+        // Si la tarea ya está completada, no hacer nada
+        if (task.isCompleted) {
+          return task;
         }
-        return { ...task, isActive: false };
-      })
-    );
-  }, []);
+
+        // Si es la tarea que se está alternando
+        if (task.id === id) {
+          // Si está activa, pausarla y acumular el tiempo transcurrido
+          if (task.isActive) {
+            const timeElapsedSinceLastActive = Math.floor((now - (task.lastActiveTime || now)) / 1000);
+            return {
+              ...task,
+              isActive: false,
+              elapsedTime: task.elapsedTime + timeElapsedSinceLastActive,
+              lastActiveTime: undefined // Limpiar lastActiveTime al pausar
+            };
+          } else {
+            // Si está inactiva, activarla y registrar el momento de activación
+            return {
+              ...task,
+              isActive: true,
+              lastActiveTime: now // Establecer lastActiveTime al activar
+            };
+          }
+        } else {
+          // Para otras tareas: si estaban activas, pausarlas y acumular su tiempo
+          if (task.isActive) {
+            const timeElapsedSinceLastActive = Math.floor((now - (task.lastActiveTime || now)) / 1000);
+            return {
+              ...task,
+              isActive: false,
+              elapsedTime: task.elapsedTime + timeElapsedSinceLastActive,
+              lastActiveTime: undefined // Limpiar lastActiveTime al pausar
+            };
+          }
+          return task;
+        }
+      });
+    });
+  }, []); // No hay dependencias externas que necesiten ser rastreadas aquí
 
   const handleCompleteTask = useCallback((id: number) => {
     const now = Date.now();
     setTasks(prevTasks =>
       prevTasks.map(task => {
         if (task.id === id) {
+          // Asegurarse de que si la tarea estaba activa, su tiempo se acumule antes de completarla
+          let finalElapsedTime = task.elapsedTime;
+          if (task.isActive && task.lastActiveTime) {
+            const timeElapsedSinceLastActive = Math.floor((now - task.lastActiveTime) / 1000);
+            finalElapsedTime += timeElapsedSinceLastActive;
+          }
+
           if (!task.isCompleted) {
-            if (task.elapsedTime <= task.estimatedTime) {
+            if (finalElapsedTime <= task.estimatedTime) { // Usar finalElapsedTime
               setPoints(prevPoints => prevPoints + 1);
             }
           }
@@ -157,7 +207,9 @@ const App: React.FC = () => {
             ...task, 
             isActive: false, 
             isCompleted: true,
-            completedAt: now
+            completedAt: now,
+            elapsedTime: finalElapsedTime, // Guardar el tiempo final acumulado
+            lastActiveTime: undefined // Limpiar lastActiveTime al completar
           };
         }
         return task;
@@ -186,7 +238,14 @@ const App: React.FC = () => {
     setShowSettingsModal(false);
     if(isDayStarted) {
       setIsDayStarted(false);
-      setTasks(prevTasks => prevTasks.map(task => ({ ...task, isActive: false })));
+      // Pausar todas las tareas activas y acumular su tiempo antes de reiniciar el día
+      setTasks(prevTasks => prevTasks.map(task => {
+        if (task.isActive && task.lastActiveTime) {
+          const timeElapsedSinceLastActive = Math.floor((Date.now() - task.lastActiveTime) / 1000);
+          return { ...task, isActive: false, elapsedTime: task.elapsedTime + timeElapsedSinceLastActive, lastActiveTime: undefined };
+        }
+        return { ...task, isActive: false };
+      }));
       alert("Workday settings updated. Please start a new day to apply the changes.");
     }
   };
@@ -215,21 +274,33 @@ const App: React.FC = () => {
 
     // Clean up tasks for the new day:
     // - Filter out tasks that were completed on the previous day.
-    // - Ensure all remaining (pending) tasks are inactive.
+    // - Ensure all remaining (pending) tasks are inactive and reset their elapsed time for the new day
     setTasks(prevTasks => 
         prevTasks
             .filter(task => !task.isCompleted)
-            .map(task => ({ ...task, isActive: false }))
+            .map(task => ({ 
+              ...task, 
+              isActive: false, 
+              elapsedTime: 0, // Reiniciar el tiempo transcurrido para el nuevo día
+              lastActiveTime: undefined // Asegurarse de que no haya un lastActiveTime residual
+            }))
     );
 
     setIsDayStarted(true);
   };
 
   const handleEndDay = () => {
-    if (window.confirm("Are you sure you want to end your workday? All timers will stop. Completed tasks will be cleared when you start the next day.")) {
+    if (window.confirm("¿Estás seguro de que quieres finalizar tu jornada laboral? Todos los temporizadores se detendrán. Las tareas completadas se borrarán cuando inicies el próximo día.")) {
       setIsDayStarted(false);
+      // Pausar todas las tareas activas y acumular su tiempo al finalizar el día
       setTasks(prevTasks =>
-        prevTasks.map(task => ({ ...task, isActive: false }))
+        prevTasks.map(task => {
+          if (task.isActive && task.lastActiveTime) {
+            const timeElapsedSinceLastActive = Math.floor((Date.now() - task.lastActiveTime) / 1000);
+            return { ...task, isActive: false, elapsedTime: task.elapsedTime + timeElapsedSinceLastActive, lastActiveTime: undefined };
+          }
+          return { ...task, isActive: false };
+        })
       );
     }
   };
@@ -361,27 +432,38 @@ const App: React.FC = () => {
         <main className="min-h-screen p-4 sm:p-8 bg-gradient-to-br from-slate-900 to-slate-800">
           <div className="max-w-3xl mx-auto">
         <header className="relative text-center mb-8 h-20 sm:h-auto">
+
+
+          <div>
+          <LogoEmpresas className="hover:scale-110 transition-transform" />
+           <h1 className="text-lg font-semibold mb-3">Chess Control</h1>
+          </div>
   <div className="absolute top-0 right-0 flex items-center gap-3">
     {isDayStarted && (
-      <button 
+     <button 
         onClick={handleEndDay} 
-        className="group flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500/10 to-red-600/10 hover:from-red-500/20 hover:to-red-600/20 border border-red-500/30 hover:border-red-400/50 text-red-300 hover:text-red-200 rounded-xl transition-all duration-300 font-medium text-sm backdrop-blur-sm shadow-lg hover:shadow-red-500/10"
+        // CAMBIO: Fondo rojo oscuro y sólido, y hover más oscuro
+        className="group flex items-center gap-2 px-4 py-2.5 bg-red-700 hover:bg-red-800 border border-red-600 text-white rounded-xl transition-all duration-300 font-medium text-sm shadow-lg hover:shadow-red-500/30"
         aria-label="End workday"
-      >
-        <StopCircleIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+    >
+        <LogOutIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200 text-white" />
         <span className="hidden sm:inline">Finalizar Día</span>
-      </button>
+    </button>
     )}
     
     {isDayStarted && (
-      <button
+       <button
         onClick={toggleFocusMode}
-        className="group flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500/10 to-purple-600/10 hover:from-indigo-500/20 hover:to-purple-600/20 border border-indigo-500/30 hover:border-indigo-400/50 text-indigo-300 hover:text-indigo-200 rounded-xl transition-all duration-300 font-medium text-sm backdrop-blur-sm shadow-lg hover:shadow-indigo-500/10"
+        // CAMBIO: Fondo verde claro y sólido, con hover más oscuro
+        className="group flex items-center gap-2 px-4 py-2.5 bg-lime-500 hover:bg-lime-600 border border-lime-400 text-slate-900 rounded-xl transition-all duration-300 font-medium text-sm shadow-lg hover:shadow-lime-500/30"
         aria-label="Focus mode"
-      >
-        <FocusIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+    >
+        {/*
+        El color del icono ahora es oscuro para contrastar con el fondo verde claro.
+        */}
+        <FocusIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200 text-slate-900" />
         <span className="hidden sm:inline">Modo Enfoque</span>
-      </button>
+    </button>
     )}
     
     {workDay && (
@@ -408,23 +490,7 @@ const App: React.FC = () => {
           
           <div className="w-px h-6 bg-slate-600/50"></div>
           
-          <button 
-            onClick={() => setShowAdvancedSettings(true)} 
-            className="group p-2 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-all duration-200"
-            aria-label="Advanced settings"
-            title="Configuración avanzada"
-          >
-            <SettingsIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
-          </button>
-          
-          <button 
-            onClick={() => setShowSettingsModal(true)} 
-            className="group p-2 text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-all duration-200"
-            aria-label="Work hours settings"
-            title="Horario de trabajo"
-          >
-            <SettingsIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
-          </button>
+        
         </div>
         
         {/* Botón de menú mejorado */}
@@ -529,9 +595,9 @@ const App: React.FC = () => {
     )}
   </div>
   
-  <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-lime-400 pb-2 pt-8 sm:pt-0">
-ALO-TASK-CONTROL
-  </h1>
+
+
+
   <p className="text-slate-400">Controlador de reloj para productividad</p>
 </header>
             

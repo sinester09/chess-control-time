@@ -1,0 +1,91 @@
+@import 'tailwindcss';
+
+/* Animaciones personalizadas para TaskInput */
+:root {
+  --color-primary-dark: #2c3e50; /* Azul oscuro/grisáceo para fondos o texto principal */
+  --color-accent-teal: #1abc9c; /* Un verde azulado más suave para acentos */
+  --color-accent-purple: #9b59b6; /* Un toque de púrpura para diversidad */
+  --color-neutral-light: #ecf0f1; /* Gris claro para fondos secundarios */
+  --color-text-light: #f8f9fa; /* Blanco roto para texto en fondos oscuros */
+  --color-text-dark: #34495e; /* Gris oscuro para texto en fondos claros */
+}
+
+
+/* Animaciones personalizadas para TaskInput */
+/* Hemos suavizado los colores del gradiente para que sean menos intensos */
+@keyframes gradient-x {
+  0%, 100% {
+    background-size: 200% 200%;
+    /* Usamos colores más sutiles para el gradiente */
+    background-image: linear-gradient(to right, var(--color-accent-teal), var(--color-accent-purple), var(--color-accent-teal));
+    background-position: left center;
+  }
+  50% {
+    background-size: 200% 200%;
+    background-image: linear-gradient(to right, var(--color-accent-teal), var(--color-accent-purple), var(--color-accent-teal));
+    background-position: right center;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 400% 400%;
+  animation: gradient-x 6s ease infinite;
+}
+
+/* Efecto de brillo (shimmer) */
+/* Mantenemos el efecto, pero podemos ajustar su color si se aplica a un elemento con fondo */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+  /* Considera añadir un color para el shimmer si es un efecto de "carga" */
+  /* background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.3), transparent); */
+}
+
+/* Efectos glow personalizados */
+/* Hemos reducido la opacidad y el tamaño de las sombras para un brillo más suave */
+.input-glow:focus {
+  outline: none; /* Eliminar el contorno por defecto del navegador */
+  box-shadow:
+    0 0 10px rgba(var(--color-accent-teal), 0.6), /* Brillo principal más suave */
+    0 0 20px rgba(var(--color-accent-teal), 0.3), /* Brillo secundario */
+    inset 0 1px 0 rgba(255, 255, 255, 0.1); /* Sutil brillo interno */
+  transition: box-shadow 0.3s ease; /* Transición suave al enfocar */
+}
+
+.button-glow:hover {
+  box-shadow:
+    0 4px 16px rgba(var(--color-accent-teal), 0.4), /* Sombra principal al pasar el ratón */
+    0 2px 8px rgba(var(--color-accent-teal), 0.2), /* Sombra secundaria */
+    inset 0 1px 0 rgba(255, 255, 255, 0.2); /* Sutil brillo interno */
+  transition: box-shadow 0.3s ease; /* Transición suave al pasar el ratón */
+}
+
+/* Sugerencias adicionales para una mejor UX general: */
+
+/* Estilo para el cuerpo o contenedor principal */
+body {
+  font-family: 'Inter', sans-serif; /* Fuente más moderna y legible */
+  background-color: var(--color-neutral-light); /* Fondo general más suave */
+  color: var(--color-text-dark); /* Color de texto por defecto */
+}
+
+/* Ejemplo de cómo usar los colores en otros elementos (puedes aplicarlos con clases de Tailwind) */
+.bg-primary-dark {
+  background-color: var(--color-primary-dark);
+}
+
+.text-accent-teal {
+  color: var(--color-accent-teal);
+}
+
+.border-accent-purple {
+  border-color: var(--color-accent-purple);
+}

@@ -28,11 +28,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-slate-800 border border-cyan-500 rounded-lg shadow-2xl p-8 max-w-md w-full transform transition-all scale-100 opacity-100">
-        <h2 className="text-2xl font-bold text-white mb-4">Workday Settings</h2>
-        <p className="text-slate-300 mb-6">Set your work hours to get reminders for active breaks every 2 hours.</p>
+        <h2 className="text-2xl font-bold text-white mb-4">Bienvenido a Chess Control</h2>
+        <p className="text-slate-300 mb-6">Empieza un nuevo dia selecciona tu horario de trabajo, el horario por defecto es de 09:00 a 17:00</p>
+        <p className="text-slate-300 mb-6">Recuerda que puedes cambiarlo en cualquier momento en la sección de configuración</p>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label htmlFor="start-time" className="text-slate-200 font-medium">Start Time</label>
+            <label htmlFor="start-time" className="text-slate-200 font-medium">Horario de inicio</label>
             <input
               type="time"
               id="start-time"
@@ -42,7 +43,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
             />
           </div>
           <div className="flex items-center justify-between">
-            <label htmlFor="end-time" className="text-slate-200 font-medium">End Time</label>
+            <label htmlFor="end-time" className="text-slate-200 font-medium">Hora de termino</label>
             <input
               type="time"
               id="end-time"
@@ -59,13 +60,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
             disabled={!initialWorkDay}
             aria-disabled={!initialWorkDay}
           >
-            Cancel
+            Cancelar
           </button>
           <button
             onClick={handleSave}
             className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-6 rounded-lg transition"
           >
-            Save Settings
+            Guardar Horario
           </button>
         </div>
       </div>
