@@ -41,6 +41,7 @@ const App: React.FC = () => {
 
   // Ref para el timer
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Main task timer effect - Lógica de tiempo corregida
   useEffect(() => {
@@ -188,6 +189,11 @@ const App: React.FC = () => {
 
   const handleCompleteTask = useCallback((id: number) => {
     const now = Date.now();
+  if (audioRef.current) {
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(err => console.error("Error reproduciendo sonido:", err));
+  }
+
     setTasks(prevTasks =>
       prevTasks.map(task => {
         if (task.id === id) {
@@ -391,6 +397,7 @@ const App: React.FC = () => {
 
   return (
     <>
+<audio ref={audioRef} src="/task-complete.mp3" preload="auto" />
       <PauseReminderModal 
         show={showPauseReminder} 
         onConfirm={handleConfirmPause} 
@@ -510,6 +517,7 @@ const App: React.FC = () => {
           
           {showMenu && (
             <>
+<audio ref={audioRef} src="/task-complete.mp3" preload="auto" />
               {/* Overlay para cerrar el menú */}
               <div 
                 className="fixed inset-0 z-10" 
@@ -603,6 +611,7 @@ const App: React.FC = () => {
             
             {isDayStarted ? (
               <>
+<audio ref={audioRef} src="/task-complete.mp3" preload="auto" />
                 <StatsDisplay points={points} activePauses={activePauses} totalWorkTime={totalWorkTime} tasks={tasks} />
                 <TaskInput onAddTask={handleAddTask} />
                 <TaskList 
