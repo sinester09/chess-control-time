@@ -9,8 +9,16 @@ import AdvancedSettingsModal from './components/AdvancedSettingsModal';
 import StartDayScreen from './components/StartDayScreen';
 import FocusMode from './components/FocusMode';
 import { SettingsIcon, StopCircleIcon, DownloadIcon, UploadIcon, PlayCircleIcon, FocusIcon, MenuIcon, LogOutIcon, LogoEmpresas } from './components/icons';
+import { TaskStorageService } from './src/services/taskStorageService';
+import { getOrCreateUserUid } from './src/utils/uid';
+import { useMemo } from 'react';
 
 const App: React.FC = () => {
+  const storageService = useMemo(() => {
+    const uid = getOrCreateUserUid();
+    return new TaskStorageService(uid);
+  }, []);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [points, setPoints] = useState<number>(0);
   const [activePauses, setActivePauses] = useState<number>(0);
@@ -34,6 +42,7 @@ const App: React.FC = () => {
   
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showMenu, setShowMenu] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Refs para el timer y audio
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -44,154 +53,49 @@ const App: React.FC = () => {
   const originalTitleRef = useRef<string>(document.title);
   const titleBlinkRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ SOLUCIÓN: Timer corregido que maneja background de forma precisa
   useEffect(() => {
-    if (!isDayStarted) {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+    const loadData = async () => {
+      setIsLoading(true);
+      const storedTasks = await storageService.getTasks();
+      setTasks(storedTasks);
+      const storedSettings = await storageService.getSettings();
+      setSettings(storedSettings);
+      if (storedSettings.workDay) {
+        setWorkDay(storedSettings.workDay);
+      } else {
+        setShowSettingsModal(true);
       }
-      // Restaurar título original al parar el día
-      document.title = originalTitleRef.current;
-      if (titleBlinkRef.current) {
-        clearInterval(titleBlinkRef.current);
-        titleBlinkRef.current = null;
-      }
-      return;
-    }
+      setIsLoading(false);
+    };
+    loadData();
+  }, [storageService]);
 
-    // ✅ Timer principal - solo incrementa cuando la app está activa
-    timerRef.current = setInterval(() => {
-      // Solo actualizar si la pestaña está visible
-      if (!document.hidden) {
+  useEffect(() => {
+    if (isLoading || !isDayStarted) return;
+
+    const timer = setInterval(() => {
         setTasks(prevTasks => {
-          const newTasks = prevTasks.map(task => {
-            if (task.isActive && !task.isCompleted) {
-              const newElapsedTime = task.elapsedTime + 1;
-              
-              // ✅ Verificar si se excedió el tiempo estimado
-              if (!task.timeExceededNotified && newElapsedTime > task.estimatedTime) {
-                // Reproducir sonido de alerta
-                if (alertAudioRef.current) {
-                  alertAudioRef.current.currentTime = 0;
-                  alertAudioRef.current.play().catch(err => console.error("Error reproduciendo alerta:", err));
+            let activeTaskFound = false;
+            const newTasks = prevTasks.map(task => {
+                if (task.isActive && !task.isCompleted) {
+                    activeTaskFound = true;
+                    return { ...task, elapsedTime: task.elapsedTime + 1 };
                 }
-                
-                return { 
-                  ...task, 
-                  elapsedTime: newElapsedTime,
-                  timeExceededNotified: true 
-                };
-              }
-              
-              return { ...task, elapsedTime: newElapsedTime };
+                return task;
+            });
+
+            if (activeTaskFound) {
+                setTotalWorkTime(prev => prev + 1);
+                storageService.saveTasks(newTasks);
+                return newTasks;
             }
-            return task;
-          });
 
-          // Actualizar totalWorkTime
-          const currentTotalWorkTime = newTasks.reduce((sum, task) => sum + task.elapsedTime, 0);
-          setTotalWorkTime(currentTotalWorkTime);
-
-          return newTasks;
+            return prevTasks;
         });
-      }
     }, 1000);
 
-    // ✅ SOLUCIÓN: Manejo mejorado de visibilitychange
-    const handleVisibilityChange = () => {
-      const now = Date.now();
-      
-      if (document.hidden) {
-        // ✅ Cuando se oculta la app, guardar timestamp para tareas activas
-        setTasks(prevTasks => {
-          return prevTasks.map(task => {
-            if (task.isActive && !task.isCompleted) {
-              return {
-                ...task,
-                lastActiveTime: now // Marcar cuando se ocultó la app
-              };
-            }
-            return task;
-          });
-        });
-      } else {
-        // ✅ Cuando regresa la app, calcular tiempo de background SOLO UNA VEZ
-        setTasks(prevTasks => {
-          return prevTasks.map(task => {
-            if (task.isActive && !task.isCompleted && task.lastActiveTime) {
-              const timeInBackground = Math.floor((now - task.lastActiveTime) / 1000);
-              return {
-                ...task,
-                elapsedTime: task.elapsedTime + timeInBackground,
-                lastActiveTime: undefined // ✅ Limpiar para evitar doble contabilización
-              };
-            }
-            return task;
-          });
-        });
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      if (titleBlinkRef.current) {
-        clearInterval(titleBlinkRef.current);
-        titleBlinkRef.current = null;
-      }
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isDayStarted]);
-
-  // ✅ Effect para manejar alertas visuales en el título del tab
-  useEffect(() => {
-    const overdueTasks = tasks.filter(task => 
-      task.isActive && !task.isCompleted && task.elapsedTime > task.estimatedTime
-    );
-
-    if (overdueTasks.length > 0 && isDayStarted) {
-      // Iniciar parpadeo del título si no está ya activo
-      if (!titleBlinkRef.current) {
-        let isAlertTitle = false;
-        titleBlinkRef.current = setInterval(() => {
-          if (isAlertTitle) {
-            document.title = originalTitleRef.current;
-          } else {
-            const overdueCount = overdueTasks.length;
-            document.title = `⚠️ ${overdueCount} tarea${overdueCount > 1 ? 's' : ''} excedida${overdueCount > 1 ? 's' : ''} - Chess Control`;
-          }
-          isAlertTitle = !isAlertTitle;
-        }, 1500); // Parpadea cada 1.5 segundos
-      }
-    } else {
-      // Detener parpadeo y restaurar título original
-      if (titleBlinkRef.current) {
-        clearInterval(titleBlinkRef.current);
-        titleBlinkRef.current = null;
-      }
-      document.title = originalTitleRef.current;
-    }
-
-    // Cleanup al desmontar
-    return () => {
-      if (titleBlinkRef.current) {
-        clearInterval(titleBlinkRef.current);
-        titleBlinkRef.current = null;
-      }
-    };
-  }, [tasks, isDayStarted]);
-
-  // Effect to show settings modal on first load if workday is not set
-  useEffect(() => {
-    if (!workDay) {
-      setShowSettingsModal(true);
-    }
-  }, [workDay]);
+    return () => clearInterval(timer);
+  }, [isDayStarted, isLoading, storageService]);
 
   // Accurate pause reminder effect based on effective work time
   useEffect(() => {
@@ -206,95 +110,41 @@ const App: React.FC = () => {
     }
   }, [totalWorkTime, activePauses, isDayStarted, showPauseReminder, snoozeUntil, settings.pauseInterval]);
 
-  const handleAddTask = (name: string, estimatedTime: number) => {
-    const now = Date.now();
-    const newTask: Task = {
-      id: now,
-      name,
-      estimatedTime,
-      elapsedTime: 0,
-      isActive: false,
-      isCompleted: false,
-      timeExceededNotified: false,
-      createdAt: now,
-    };
-    setTasks(prevTasks => [...prevTasks, newTask]);
+  const handleAddTask = async (name: string, estimatedTime: number) => {
+    const newTask = await storageService.addTask({ name, estimatedTime, completedAt: null, lastActiveTime: null });
+    if (newTask) {
+      setTasks(prevTasks => [...prevTasks, newTask]);
+    }
   };
 
-  // ✅ SOLUCIÓN: handleToggleTask simplificado - sin manejo manual de tiempo
-  const handleToggleTask = useCallback((id: number) => {
-    setTasks(prevTasks => {
-      return prevTasks.map(task => {
-        if (task.isCompleted) {
-          return task;
-        }
+  const handleToggleTask = async (id: number) => {
+    await storageService.toggleTask(id);
+    const updatedTasks = await storageService.getTasks();
+    setTasks(updatedTasks);
+  };
 
-        if (task.id === id) {
-          // Solo cambiar el estado isActive - el timer se encarga del tiempo
-          return {
-            ...task,
-            isActive: !task.isActive,
-            lastActiveTime: undefined // Limpiar cualquier timestamp residual
-          };
-        } else if (task.isActive) {
-          // Pausar otras tareas activas
-          return {
-            ...task,
-            isActive: false,
-            lastActiveTime: undefined
-          };
-        }
-        
-        return task;
-      });
-    });
-  }, []);
-
-  const handleCompleteTask = useCallback((id: number) => {
+  const handleCompleteTask = async (id: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(err => console.error("Error reproduciendo sonido:", err));
     }
 
-    setTasks(prevTasks =>
-      prevTasks.map(task => {
-        if (task.id === id && !task.isCompleted) {
-          // Otorgar punto solo si la tarea se completó dentro del tiempo estimado
-          if (task.elapsedTime <= task.estimatedTime) {
-            setPoints(prevPoints => prevPoints + 1);
-          }
-          
-          return { 
-            ...task, 
-            isActive: false, 
-            isCompleted: true,
-            completedAt: Date.now(),
-            lastActiveTime: undefined
-          };
-        }
-        return task;
-      })
-    );
+    const taskToComplete = tasks.find(t => t.id === id);
+    if (taskToComplete && taskToComplete.elapsedTime <= taskToComplete.estimatedTime) {
+      setPoints(prevPoints => prevPoints + 1);
+    }
 
-    // Limpiar alertas del título si no hay más tareas excedidas
-    setTimeout(() => {
-      const remainingOverdueTasks = tasks.filter(task => 
-        task.isActive && !task.isCompleted && task.elapsedTime > task.estimatedTime && task.id !== id
-      );
-      
-      if (remainingOverdueTasks.length === 0) {
-        document.title = originalTitleRef.current;
-        if (titleBlinkRef.current) {
-          clearInterval(titleBlinkRef.current);
-          titleBlinkRef.current = null;
-        }
-      }
-    }, 100);
-  }, [tasks]);
+    await storageService.completeTask(id);
+    const updatedTasks = await storageService.getTasks();
+    setTasks(updatedTasks);
+  };
 
-  const handleDeleteTask = useCallback((id: number) => {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
-  }, []);
+  const handleDeleteTask = async (id: number) => {
+    const success = await storageService.deleteTask(id);
+    if (success) {
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
+    }
+  };
 
   const handleConfirmPause = () => {
     setActivePauses(prev => prev + 1);
@@ -308,18 +158,11 @@ const App: React.FC = () => {
     setShowPauseReminder(false);
   };
 
-  const handleSaveSettings = (start: string, end: string) => {
-    setWorkDay({ start, end });
+  const handleSaveSettings = async (start: string, end: string) => {
+    const newWorkDay = { start, end };
+    setWorkDay(newWorkDay);
+    await storageService.saveSettings({ workDay: newWorkDay });
     setShowSettingsModal(false);
-    if(isDayStarted) {
-      setIsDayStarted(false);
-      setTasks(prevTasks => prevTasks.map(task => ({ 
-        ...task, 
-        isActive: false, 
-        lastActiveTime: undefined 
-      })));
-      alert("Workday settings updated. Please start a new day to apply the changes.");
-    }
   };
 
   const handleCloseSettings = () => {
@@ -328,8 +171,9 @@ const App: React.FC = () => {
     }
   };
   
-  const handleSaveAdvancedSettings = (newSettings: Settings) => {
+  const handleSaveAdvancedSettings = async (newSettings: Settings) => {
     setSettings(newSettings);
+    await storageService.saveSettings(newSettings);
     setShowAdvancedSettings(false);
   };
   
@@ -337,7 +181,28 @@ const App: React.FC = () => {
     setShowAdvancedSettings(false);
   };
 
-  const handleStartDay = () => {
+  const handleStartDay = async () => {
+    // Unlock audio on first user interaction
+    const unlockAudio = async () => {
+      try {
+        if (audioRef.current) {
+          await audioRef.current.play();
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        if (alertAudioRef.current) {
+          await alertAudioRef.current.play();
+          alertAudioRef.current.pause();
+          alertAudioRef.current.currentTime = 0;
+        }
+      } catch (error) {
+        // Autoplay was prevented. This is common before a user interaction.
+        // We can ignore this error as the main goal is to enable future plays.
+      }
+    };
+
+    unlockAudio();
+    
     // Guardar título original
     originalTitleRef.current = document.title;
     
@@ -348,17 +213,9 @@ const App: React.FC = () => {
     setSnoozeUntil(null);
 
     // Clean up tasks for the new day
-    setTasks(prevTasks => 
-        prevTasks
-            .filter(task => !task.isCompleted)
-            .map(task => ({ 
-              ...task, 
-              isActive: false, 
-              elapsedTime: 0,
-              lastActiveTime: undefined,
-              timeExceededNotified: false // ✅ Reset notificación de tiempo excedido
-            }))
-    );
+    const activeTasks = tasks.filter(task => !task.isCompleted).map(task => ({ ...task, isActive: false, elapsedTime: 0, timeExceededNotified: false }));
+    setTasks(activeTasks);
+    await storageService.saveTasks(activeTasks);
 
     setIsDayStarted(true);
   };
@@ -463,8 +320,8 @@ const App: React.FC = () => {
 
   return (
     <>
-      <audio ref={audioRef} src="/finish.mp3" preload="auto" />
-      <audio ref={alertAudioRef} src="/yet.mp3" preload="auto" />
+      <audio ref={audioRef} src={`${import.meta.env.BASE_URL}finish.mp3`} preload="auto" />
+      <audio ref={alertAudioRef} src={`${import.meta.env.BASE_URL}yet.mp3`} preload="auto" />
       <PauseReminderModal 
         show={showPauseReminder} 
         onConfirm={handleConfirmPause} 
