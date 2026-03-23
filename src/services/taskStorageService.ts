@@ -1,28 +1,10 @@
-import { Task } from '../../types';
+import { Task, Settings, DEFAULT_SETTINGS } from '../../types';
 
-// Interfaz para configuraciones
-export interface TaskSettings {
-  toleranceTime: number;
-  theme: 'light' | 'dark';
-  notifications: boolean;
-  autoBackup: boolean;
-  workDay: { start: string; end: string } | null;
-}
-
-// Clase principal del servicio
+// Clase principal del servicio (localStorage)
 export class TaskStorageService {
   private readonly TASKS_KEY: string;
   private readonly SETTINGS_KEY: string;
   private readonly BACKUP_KEY: string;
-
-  // Configuración por defecto
-  private readonly DEFAULT_SETTINGS: TaskSettings = {
-    toleranceTime: 300, // 5 minutos
-    theme: 'dark',
-    notifications: true,
-    autoBackup: true,
-    workDay: null,
-  };
 
   constructor(private uid: string) {
     if (!uid) {
@@ -63,38 +45,32 @@ export class TaskStorageService {
       const tasksJson = localStorage.getItem(this.TASKS_KEY);
       if (!tasksJson) return [];
       const tasks = JSON.parse(tasksJson) as Task[];
-      return tasks.filter(task => 
-        task && 
-        typeof task.id === 'number' && 
-        typeof task.name === 'string' && 
+      return tasks.filter(task =>
+        task &&
+        typeof task.id === 'number' &&
+        typeof task.name === 'string' &&
         task.name.trim().length > 0
       );
     }, []);
   }
 
   async saveTasks(tasks: Task[]): Promise<boolean> {
-    return this.safeOperation(async () => {
-      const validTasks = tasks.filter(task => 
-        task && 
-        typeof task.id === 'number' && 
-        typeof task.name === 'string' && 
+    return this.safeOperation(() => {
+      const validTasks = tasks.filter(task =>
+        task &&
+        typeof task.id === 'number' &&
+        typeof task.name === 'string' &&
         task.name.trim().length > 0
       );
-
       localStorage.setItem(this.TASKS_KEY, JSON.stringify(validTasks));
-      
-      if (await this.shouldAutoBackup()) {
-        await this.createBackup(validTasks);
-      }
-      
       return true;
-    }, Promise.resolve(false));
+    }, false);
   }
 
-  async addTask(taskData: Omit<Task, 'id' | 'createdAt' | 'isActive' | 'isCompleted' | 'elapsedTime' | 'timeExceededNotified'>): Promise<Task | null> {
+  async addTask(taskData: Pick<Task, 'name' | 'estimatedTime' | 'completedAt'>): Promise<Task | null> {
     const tasks = await this.getTasks();
     const newId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
-    
+
     const newTask: Task = {
       ...taskData,
       id: newId,
@@ -107,14 +83,14 @@ export class TaskStorageService {
 
     const updatedTasks = [...tasks, newTask];
     const success = await this.saveTasks(updatedTasks);
-    
+
     return success ? newTask : null;
   }
 
   async updateTask(taskId: number, updates: Partial<Task>): Promise<boolean> {
     const tasks = await this.getTasks();
     const taskIndex = tasks.findIndex(t => t.id === taskId);
-    
+
     if (taskIndex === -1) return false;
 
     tasks[taskIndex] = { ...tasks[taskIndex], ...updates };
@@ -124,9 +100,9 @@ export class TaskStorageService {
   async deleteTask(taskId: number): Promise<boolean> {
     const tasks = await this.getTasks();
     const filteredTasks = tasks.filter(t => t.id !== taskId);
-    
+
     if (filteredTasks.length === tasks.length) return false;
-    
+
     return await this.saveTasks(filteredTasks);
   }
 
@@ -148,10 +124,11 @@ export class TaskStorageService {
     if (!task) return false;
 
     if (!task.isActive) {
+      // Activar esta tarea y desactivar las demás
       const tasks = await this.getTasks();
       const updatedTasks = tasks.map(t => ({
         ...t,
-        isActive: t.id === taskId ? true : false
+        isActive: t.id === taskId,
       }));
       return await this.saveTasks(updatedTasks);
     } else {
@@ -159,17 +136,17 @@ export class TaskStorageService {
     }
   }
 
-  async getSettings(): Promise<TaskSettings> {
+  async getSettings(): Promise<Settings> {
     return this.safeOperation(() => {
       const settingsJson = localStorage.getItem(this.SETTINGS_KEY);
-      if (!settingsJson) return this.DEFAULT_SETTINGS;
-      
+      if (!settingsJson) return DEFAULT_SETTINGS;
+
       const parsed = JSON.parse(settingsJson);
-      return { ...this.DEFAULT_SETTINGS, ...parsed };
-    }, this.DEFAULT_SETTINGS);
+      return { ...DEFAULT_SETTINGS, ...parsed };
+    }, DEFAULT_SETTINGS);
   }
 
-  async saveSettings(settings: Partial<TaskSettings>): Promise<boolean> {
+  async saveSettings(settings: Partial<Settings>): Promise<boolean> {
     return this.safeOperation(async () => {
       const currentSettings = await this.getSettings();
       const newSettings = { ...currentSettings, ...settings };
@@ -181,12 +158,12 @@ export class TaskStorageService {
   async createBackup(tasks?: Task[]): Promise<boolean> {
     const tasksToBackup = tasks || await this.getTasks();
     const settings = await this.getSettings();
-    
+
     const backup = {
       timestamp: Date.now(),
       tasks: tasksToBackup,
       settings,
-      version: '1.0',
+      version: '2.0',
     };
 
     return this.safeOperation(() => {
@@ -202,10 +179,5 @@ export class TaskStorageService {
       localStorage.removeItem(this.BACKUP_KEY);
       return true;
     }, false);
-  }
-
-  private async shouldAutoBackup(): Promise<boolean> {
-    const settings = await this.getSettings();
-    return settings.autoBackup;
   }
 }

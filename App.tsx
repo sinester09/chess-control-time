@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Task, Settings } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Task, Settings, DEFAULT_SETTINGS } from './types';
 import TaskInput from './components/TaskInput';
 import TaskList from './components/TaskList';
 import StatsDisplay from './components/StatsDisplay';
@@ -12,10 +12,15 @@ import { SettingsIcon, StopCircleIcon, DownloadIcon, UploadIcon, PlayCircleIcon,
 import { TaskStorageService } from './src/services/taskStorageService';
 import { getOrCreateUserUid } from './src/utils/uid';
 import { useMemo } from 'react';
+import { isSupabaseConfigured } from './src/lib/supabase';
+import { SupabaseStorageService } from './src/services/supabaseStorageService';
 
 const App: React.FC = () => {
   const storageService = useMemo(() => {
     const uid = getOrCreateUserUid();
+    if (isSupabaseConfigured) {
+      return new SupabaseStorageService(uid);
+    }
     return new TaskStorageService(uid);
   }, []);
 
@@ -31,14 +36,7 @@ const App: React.FC = () => {
   const [isDayStarted, setIsDayStarted] = useState<boolean>(false);
   const [snoozeUntil, setSnoozeUntil] = useState<number | null>(null);
   
-  const [settings, setSettings] = useState<Settings>({
-    toleranceTime: 300,
-    pauseInterval: 2 * 60 * 60,
-    pauseDuration: 15,
-    snoozeDuration: 15,
-    focusModeEnabled: false,
-    pomodoroTimer: 25
-  });
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showMenu, setShowMenu] = useState<boolean>(false);
@@ -58,12 +56,21 @@ const App: React.FC = () => {
       setIsLoading(true);
       const storedTasks = await storageService.getTasks();
       setTasks(storedTasks);
+      // compute persisted stats
+      const worked = storedTasks.reduce((acc, t) => acc + (t.elapsedTime || 0), 0);
+      setTotalWorkTime(worked);
       const storedSettings = await storageService.getSettings();
       setSettings(storedSettings);
       if (storedSettings.workDay) {
         setWorkDay(storedSettings.workDay);
       } else {
         setShowSettingsModal(true);
+      }
+      // isDayStarted persists across reloads only if there is an active task
+      const tasks = await storageService.getTasks();
+      const hasActiveTask = tasks.some(t => t.isActive && !t.isCompleted);
+      if (hasActiveTask) {
+        setIsDayStarted(true);
       }
       setIsLoading(false);
     };
@@ -111,7 +118,7 @@ const App: React.FC = () => {
   }, [totalWorkTime, activePauses, isDayStarted, showPauseReminder, snoozeUntil, settings.pauseInterval]);
 
   const handleAddTask = async (name: string, estimatedTime: number) => {
-    const newTask = await storageService.addTask({ name, estimatedTime, completedAt: null, lastActiveTime: null });
+    const newTask = await storageService.addTask({ name, estimatedTime, completedAt: null });
     if (newTask) {
       setTasks(prevTasks => [...prevTasks, newTask]);
     }
@@ -224,11 +231,7 @@ const App: React.FC = () => {
     if (window.confirm("¿Estás seguro de que quieres finalizar tu jornada laboral? Todos los temporizadores se detendrán. Las tareas completadas se borrarán cuando inicies el próximo día.")) {
       setIsDayStarted(false);
       setTasks(prevTasks =>
-        prevTasks.map(task => ({
-          ...task,
-          isActive: false,
-          lastActiveTime: undefined
-        }))
+        prevTasks.map(task => ({ ...task, isActive: false }))
       );
       
       // Restaurar título original y limpiar alertas
