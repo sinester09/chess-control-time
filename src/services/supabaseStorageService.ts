@@ -15,6 +15,7 @@ import { Task, Settings, DEFAULT_SETTINGS } from '../../types';
 type TaskRow = {
   user_uid: string;
   task_id: number;
+  project_id: string | null;
   name: string;
   estimated_time: number;
   elapsed_time: number;
@@ -41,6 +42,7 @@ type SettingsRow = {
 const taskToRow = (task: Task, uid: string): TaskRow => ({
   user_uid: uid,
   task_id: task.id,
+  project_id: task.projectId ?? null,
   name: task.name,
   estimated_time: task.estimatedTime,
   elapsed_time: task.elapsedTime,
@@ -53,6 +55,7 @@ const taskToRow = (task: Task, uid: string): TaskRow => ({
 
 const rowToTask = (row: TaskRow): Task => ({
   id: row.task_id,
+  projectId: row.project_id ?? null,
   name: row.name,
   estimatedTime: row.estimated_time,
   elapsedTime: row.elapsed_time,
@@ -212,7 +215,7 @@ export class SupabaseStorageService {
   }
 
   async addTask(
-    taskData: Pick<Task, 'name' | 'estimatedTime' | 'completedAt'>
+    taskData: Pick<Task, 'name' | 'estimatedTime' | 'completedAt' | 'projectId'>
   ): Promise<Task | null> {
     const tasks = await this.getTasks();
     const newId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;

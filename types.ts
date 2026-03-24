@@ -1,14 +1,33 @@
 
 export interface Task {
   id: number;
+  projectId?: string | null;
   name: string;
   estimatedTime: number; // in seconds
   elapsedTime: number; // in seconds
   isActive: boolean;
   isCompleted: boolean;
   timeExceededNotified: boolean;
-  createdAt: number; // timestamp de creación
-  completedAt?: number | null; // timestamp de finalización (opcional)
+  createdAt: number;
+  completedAt?: number | null;
+}
+
+export interface Project {
+  id: string; // UUID
+  userId: string;
+  name: string;
+  color: string; // hex color
+  createdAt: number;
+}
+
+export interface TimeRecord {
+  id: string; // UUID
+  userId: string;
+  projectId: string | null;
+  date: string; // YYYY-MM-DD
+  totalSeconds: number;
+  taskCount: number;
+  createdAt: number;
 }
 
 export interface Settings {
@@ -30,3 +49,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoroTimer: 25,
   workDay: null,
 };
+
+export const PROJECT_COLORS = [
+  '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b',
+  '#ef4444', '#ec4899', '#06b6d4', '#84cc16',
+];

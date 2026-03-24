@@ -1,15 +1,13 @@
 import React from 'react';
-import { Task } from '../types';
+import { Task, Project } from '../types';
 import { PlayIcon, PauseIcon, CheckIcon, TrashIcon, ClockIcon } from './icons';
 
-// Función para formatear segundos en formato MM:SS
 const formatTime = (totalSeconds: number): string => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-// Función para formatear timestamp a hora local
 const formatTimestamp = (timestamp: number): string => {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -20,10 +18,11 @@ interface TaskItemProps {
   onToggle: (id: number) => void;
   onComplete: (id: number) => void;
   onDelete: (id: number) => void;
-  toleranceTime?: number; // Tiempo de tolerancia en segundos
+  toleranceTime?: number;
+  project?: Project;
 }
 
-const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelete, toleranceTime = 300 }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelete, toleranceTime = 300, project }) => {
   // Asegurar que los valores sean números válidos
   const elapsedTime = Math.max(0, Math.floor(task.elapsedTime || 0));
   const estimatedTime = Math.max(0, Math.floor(task.estimatedTime || 0));
@@ -92,12 +91,20 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle, onComplete, onDelet
         {/* Contenido principal */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between mb-2">
-            {/* Nombre de la tarea - MANTENGO LÓGICA ORIGINAL */}
-            <h3 className={`font-semibold text-lg leading-tight ${
-              task.isCompleted ? 'line-through text-gray-500' : 'text-gray-900'
-            }`}>
-              {task.name}
-            </h3>
+            <div className="flex-1 min-w-0">
+              {/* Proyecto badge */}
+              {project && (
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: project.color }} />
+                  <span className="text-xs font-medium truncate" style={{ color: project.color }}>{project.name}</span>
+                </div>
+              )}
+              <h3 className={`font-semibold text-lg leading-tight ${
+                task.isCompleted ? 'line-through text-gray-500' : 'text-gray-900'
+              }`}>
+                {task.name}
+              </h3>
+            </div>
             
             {/* Estado de la tarea */}
             <div className="flex items-center gap-2 ml-4">

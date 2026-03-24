@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Task, Settings, DEFAULT_SETTINGS } from './types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Task, Settings, DEFAULT_SETTINGS, Project, TimeRecord } from './types';
 import TaskInput from './components/TaskInput';
 import TaskList from './components/TaskList';
 import StatsDisplay from './components/StatsDisplay';
@@ -8,358 +8,246 @@ import SettingsModal from './components/SettingsModal';
 import AdvancedSettingsModal from './components/AdvancedSettingsModal';
 import StartDayScreen from './components/StartDayScreen';
 import FocusMode from './components/FocusMode';
-import { SettingsIcon, StopCircleIcon, DownloadIcon, UploadIcon, PlayCircleIcon, FocusIcon, MenuIcon, LogOutIcon, LogoEmpresas } from './components/icons';
+import AuthScreen from './components/AuthScreen';
+import ProjectModal from './components/ProjectModal';
+import DaySummaryModal from './components/DaySummaryModal';
+import { SettingsIcon, DownloadIcon, UploadIcon, FocusIcon, MenuIcon, LogOutIcon, LogoEmpresas } from './components/icons';
 import { TaskStorageService } from './src/services/taskStorageService';
 import { getOrCreateUserUid } from './src/utils/uid';
-import { useMemo } from 'react';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import { SupabaseStorageService } from './src/services/supabaseStorageService';
+import { authService, AuthUser } from './src/services/authService';
+import { projectService, timeRecordService } from './src/services/projectService';
 
 const App: React.FC = () => {
-  const storageService = useMemo(() => {
-    const uid = getOrCreateUserUid();
-    if (isSupabaseConfigured) {
-      return new SupabaseStorageService(uid);
-    }
-    return new TaskStorageService(uid);
-  }, []);
+  // ── Auth ──────────────────────────────────────────────────
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
 
+  // ── Storage service ───────────────────────────────────────
+  const storageService = useMemo(() => {
+    const uid = authUser?.id ?? getOrCreateUserUid();
+    if (isSupabaseConfigured) return new SupabaseStorageService(uid);
+    return new TaskStorageService(uid);
+  }, [authUser]);
+
+  const userId = authUser?.id ?? getOrCreateUserUid();
+
+  // ── Task & app state ──────────────────────────────────────
   const [tasks, setTasks] = useState<Task[]>([]);
   const [points, setPoints] = useState<number>(0);
   const [activePauses, setActivePauses] = useState<number>(0);
   const [totalWorkTime, setTotalWorkTime] = useState<number>(0);
-  
   const [showPauseReminder, setShowPauseReminder] = useState<boolean>(false);
   const [workDay, setWorkDay] = useState<{ start: string; end: string } | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
-
   const [isDayStarted, setIsDayStarted] = useState<boolean>(false);
   const [snoozeUntil, setSnoozeUntil] = useState<number | null>(null);
-  
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
   const [showMenu, setShowMenu] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Refs para el timer y audio
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // ── Projects ──────────────────────────────────────────────
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  // ── Day summary ───────────────────────────────────────────
+  const [showDaySummary, setShowDaySummary] = useState<boolean>(false);
+  const [daySummaryRecords, setDaySummaryRecords] = useState<TimeRecord[]>([]);
+
+  // ── Refs ──────────────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
-  
-  // Estado para el título original del documento
   const originalTitleRef = useRef<string>(document.title);
   const titleBlinkRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Auth listener ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured) { setAuthLoading(false); return; }
+    authService.getSession().then(user => { setAuthUser(user); setAuthLoading(false); });
+    const { data } = authService.onAuthStateChange(user => setAuthUser(user));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  // ── Load data ─────────────────────────────────────────────
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       const storedTasks = await storageService.getTasks();
       setTasks(storedTasks);
-      // compute persisted stats
-      const worked = storedTasks.reduce((acc, t) => acc + (t.elapsedTime || 0), 0);
-      setTotalWorkTime(worked);
+      setTotalWorkTime(storedTasks.reduce((acc, t) => acc + (t.elapsedTime || 0), 0));
       const storedSettings = await storageService.getSettings();
       setSettings(storedSettings);
-      if (storedSettings.workDay) {
-        setWorkDay(storedSettings.workDay);
-      } else {
-        setShowSettingsModal(true);
-      }
-      // isDayStarted persists across reloads only if there is an active task
-      const tasks = await storageService.getTasks();
-      const hasActiveTask = tasks.some(t => t.isActive && !t.isCompleted);
-      if (hasActiveTask) {
-        setIsDayStarted(true);
-      }
+      if (storedSettings.workDay) setWorkDay(storedSettings.workDay);
+      else setShowSettingsModal(true);
+      if (storedTasks.some(t => t.isActive && !t.isCompleted)) setIsDayStarted(true);
+      const projs = await projectService.getProjects(userId);
+      setProjects(projs);
       setIsLoading(false);
     };
     loadData();
-  }, [storageService]);
+  }, [storageService, userId]);
 
+  // ── 1-second timer ────────────────────────────────────────
   useEffect(() => {
     if (isLoading || !isDayStarted) return;
-
     const timer = setInterval(() => {
-        setTasks(prevTasks => {
-            let activeTaskFound = false;
-            const newTasks = prevTasks.map(task => {
-                if (task.isActive && !task.isCompleted) {
-                    activeTaskFound = true;
-                    return { ...task, elapsedTime: task.elapsedTime + 1 };
-                }
-                return task;
-            });
-
-            if (activeTaskFound) {
-                setTotalWorkTime(prev => prev + 1);
-                storageService.saveTasks(newTasks);
-                return newTasks;
-            }
-
-            return prevTasks;
+      setTasks(prevTasks => {
+        let activeFound = false;
+        const newTasks = prevTasks.map(task => {
+          if (task.isActive && !task.isCompleted) { activeFound = true; return { ...task, elapsedTime: task.elapsedTime + 1 }; }
+          return task;
         });
+        if (activeFound) { setTotalWorkTime(prev => prev + 1); storageService.saveTasks(newTasks); return newTasks; }
+        return prevTasks;
+      });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [isDayStarted, isLoading, storageService]);
 
-  // Accurate pause reminder effect based on effective work time
+  // ── Pause reminder ────────────────────────────────────────
   useEffect(() => {
-    if (!isDayStarted || showPauseReminder || (snoozeUntil && Date.now() < snoozeUntil)) {
-      return;
-    }
-  
-    const breaksDue = Math.floor(totalWorkTime / settings.pauseInterval);
-  
-    if (breaksDue > activePauses) {
-      setShowPauseReminder(true);
-    }
+    if (!isDayStarted || showPauseReminder || (snoozeUntil && Date.now() < snoozeUntil)) return;
+    if (Math.floor(totalWorkTime / settings.pauseInterval) > activePauses) setShowPauseReminder(true);
   }, [totalWorkTime, activePauses, isDayStarted, showPauseReminder, snoozeUntil, settings.pauseInterval]);
 
-  const handleAddTask = async (name: string, estimatedTime: number) => {
-    const newTask = await storageService.addTask({ name, estimatedTime, completedAt: null });
-    if (newTask) {
-      setTasks(prevTasks => [...prevTasks, newTask]);
-    }
+  // ── Task handlers ─────────────────────────────────────────
+  const handleAddTask = async (name: string, estimatedTime: number, projectId: string | null, _date?: Date) => {
+    const newTask = await storageService.addTask({ name, estimatedTime, completedAt: null, projectId });
+    if (newTask) setTasks(prev => [...prev, newTask]);
   };
 
   const handleToggleTask = async (id: number) => {
     await storageService.toggleTask(id);
-    const updatedTasks = await storageService.getTasks();
-    setTasks(updatedTasks);
+    setTasks(await storageService.getTasks());
   };
 
   const handleCompleteTask = async (id: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(err => console.error("Error reproduciendo sonido:", err));
-    }
-
-    const taskToComplete = tasks.find(t => t.id === id);
-    if (taskToComplete && taskToComplete.elapsedTime <= taskToComplete.estimatedTime) {
-      setPoints(prevPoints => prevPoints + 1);
-    }
-
+    if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(() => {}); }
+    const task = tasks.find(t => t.id === id);
+    if (task && task.elapsedTime <= task.estimatedTime) setPoints(p => p + 1);
     await storageService.completeTask(id);
-    const updatedTasks = await storageService.getTasks();
-    setTasks(updatedTasks);
+    setTasks(await storageService.getTasks());
   };
 
   const handleDeleteTask = async (id: number) => {
-    const success = await storageService.deleteTask(id);
-    if (success) {
-      setTasks(prevTasks => prevTasks.filter(task => task.id !== id));
-    }
+    if (await storageService.deleteTask(id)) setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  const handleConfirmPause = () => {
-    setActivePauses(prev => prev + 1);
-    setShowPauseReminder(false);
-    setSnoozeUntil(null);
-  };
-  
-  const handleSnoozePause = () => {
-    const snoozeDurationMs = settings.snoozeDuration * 60 * 1000;
-    setSnoozeUntil(Date.now() + snoozeDurationMs);
-    setShowPauseReminder(false);
-  };
+  const handleConfirmPause = () => { setActivePauses(p => p + 1); setShowPauseReminder(false); setSnoozeUntil(null); };
+  const handleSnoozePause = () => { setSnoozeUntil(Date.now() + settings.snoozeDuration * 60 * 1000); setShowPauseReminder(false); };
 
   const handleSaveSettings = async (start: string, end: string) => {
-    const newWorkDay = { start, end };
-    setWorkDay(newWorkDay);
-    await storageService.saveSettings({ workDay: newWorkDay });
+    const wd = { start, end };
+    setWorkDay(wd);
+    await storageService.saveSettings({ workDay: wd });
     setShowSettingsModal(false);
   };
 
-  const handleCloseSettings = () => {
-    if (workDay) {
-      setShowSettingsModal(false);
-    }
-  };
-  
-  const handleSaveAdvancedSettings = async (newSettings: Settings) => {
-    setSettings(newSettings);
-    await storageService.saveSettings(newSettings);
-    setShowAdvancedSettings(false);
-  };
-  
-  const handleCloseAdvancedSettings = () => {
+  const handleSaveAdvancedSettings = async (s: Settings) => {
+    setSettings(s);
+    await storageService.saveSettings(s);
     setShowAdvancedSettings(false);
   };
 
   const handleStartDay = async () => {
-    // Unlock audio on first user interaction
-    const unlockAudio = async () => {
-      try {
-        if (audioRef.current) {
-          await audioRef.current.play();
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        }
-        if (alertAudioRef.current) {
-          await alertAudioRef.current.play();
-          alertAudioRef.current.pause();
-          alertAudioRef.current.currentTime = 0;
-        }
-      } catch (error) {
-        // Autoplay was prevented. This is common before a user interaction.
-        // We can ignore this error as the main goal is to enable future plays.
-      }
-    };
-
-    unlockAudio();
-    
-    // Guardar título original
+    try {
+      if (audioRef.current) { await audioRef.current.play(); audioRef.current.pause(); audioRef.current.currentTime = 0; }
+      if (alertAudioRef.current) { await alertAudioRef.current.play(); alertAudioRef.current.pause(); alertAudioRef.current.currentTime = 0; }
+    } catch {}
     originalTitleRef.current = document.title;
-    
-    // Reset all daily stats
-    setPoints(0);
-    setActivePauses(0);
-    setTotalWorkTime(0);
-    setSnoozeUntil(null);
-
-    // Clean up tasks for the new day
-    const activeTasks = tasks.filter(task => !task.isCompleted).map(task => ({ ...task, isActive: false, elapsedTime: 0, timeExceededNotified: false }));
+    setPoints(0); setActivePauses(0); setTotalWorkTime(0); setSnoozeUntil(null);
+    const activeTasks = tasks.filter(t => !t.isCompleted).map(t => ({ ...t, isActive: false, elapsedTime: 0, timeExceededNotified: false }));
     setTasks(activeTasks);
     await storageService.saveTasks(activeTasks);
-
     setIsDayStarted(true);
   };
 
-  const handleEndDay = () => {
-    if (window.confirm("¿Estás seguro de que quieres finalizar tu jornada laboral? Todos los temporizadores se detendrán. Las tareas completadas se borrarán cuando inicies el próximo día.")) {
-      setIsDayStarted(false);
-      setTasks(prevTasks =>
-        prevTasks.map(task => ({ ...task, isActive: false }))
-      );
-      
-      // Restaurar título original y limpiar alertas
-      document.title = originalTitleRef.current;
-      if (titleBlinkRef.current) {
-        clearInterval(titleBlinkRef.current);
-        titleBlinkRef.current = null;
-      }
-    }
+  const handleEndDay = async () => {
+    if (!window.confirm('¿Finalizar jornada? Se guardarán las horas por proyecto.')) return;
+    const records = await timeRecordService.saveEndOfDay(userId, tasks);
+    setDaySummaryRecords(records);
+    setIsDayStarted(false);
+    setTasks(prev => prev.map(t => ({ ...t, isActive: false })));
+    document.title = originalTitleRef.current;
+    if (titleBlinkRef.current) { clearInterval(titleBlinkRef.current); titleBlinkRef.current = null; }
+    setShowDaySummary(true);
   };
-  
-  // Función para exportar datos
+
+  // ── Project handlers ──────────────────────────────────────
+  const handleSaveProject = async (name: string, color: string) => {
+    if (editingProject) {
+      await projectService.updateProject(userId, editingProject.id, name, color);
+      setProjects(prev => prev.map(p => p.id === editingProject.id ? { ...p, name, color } : p));
+    } else {
+      const proj = await projectService.createProject(userId, name, color);
+      if (proj) setProjects(prev => [...prev, proj]);
+    }
+    setShowProjectModal(false);
+    setEditingProject(null);
+  };
+
+  const handleAuth = (id: string, email: string) => setAuthUser({ id, email });
+  const handleLogout = async () => {
+    await authService.signOut();
+    setAuthUser(null);
+    setTasks([]); setProjects([]); setIsDayStarted(false);
+  };
+
   const handleExportData = () => {
-    const data = {
-      tasks,
-      points,
-      activePauses,
-      totalWorkTime,
-      workDay,
-      settings
+    const uri = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ tasks, points, activePauses, totalWorkTime, workDay, settings, projects }, null, 2))}`;
+    Object.assign(document.createElement('a'), { href: uri, download: `taskflow-${new Date().toISOString().slice(0,10)}.json` }).click();
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target?.result as string);
+        if (!Array.isArray(data.tasks)) { alert('Formato inválido.'); return; }
+        setTasks(data.tasks);
+        if (typeof data.points === 'number') setPoints(data.points);
+        if (typeof data.activePauses === 'number') setActivePauses(data.activePauses);
+        if (typeof data.totalWorkTime === 'number') setTotalWorkTime(data.totalWorkTime);
+        if (data.workDay) setWorkDay(data.workDay);
+        if (data.settings) setSettings(data.settings);
+        if (data.projects) setProjects(data.projects);
+        alert('Datos importados correctamente.');
+      } catch { alert('Error al importar.'); }
     };
-    
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
-    
-    const exportFileDefaultName = `taskflow-data-${new Date().toISOString().slice(0, 10)}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    reader.readAsText(file);
   };
-  
-  // Función para importar datos
-  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
-    if (event.target.files && event.target.files.length > 0) {
-      fileReader.readAsText(event.target.files[0], "UTF-8");
-      fileReader.onload = e => {
-        if (e.target && typeof e.target.result === 'string') {
-          try {
-            const data = JSON.parse(e.target.result);
-            
-            if (data.tasks && Array.isArray(data.tasks)) {
-              setTasks(data.tasks);
-              if (typeof data.points === 'number') setPoints(data.points);
-              if (typeof data.activePauses === 'number') setActivePauses(data.activePauses);
-              if (typeof data.totalWorkTime === 'number') setTotalWorkTime(data.totalWorkTime);
-              if (data.workDay) setWorkDay(data.workDay);
-              if (data.settings) setSettings(data.settings);
-              
-              alert('Data imported successfully!');
-            } else {
-              alert('Invalid data format. Could not import.');
-            }
-          } catch (error) {
-            console.error('Error parsing JSON:', error);
-            alert('Error importing data. Please check the file format.');
-          }
-        }
-      };
-      fileReader.onerror = () => {
-        alert('Error reading file.');
-      };
-    }
-  };
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const triggerFileInput = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-  
-  const toggleFocusMode = () => {
-    setSettings(prev => ({
-      ...prev,
-      focusModeEnabled: !prev.focusModeEnabled
-    }));
-    setShowMenu(false);
-  };
-  
-  const closeMenu = () => {
-    setShowMenu(false);
-  };
-  
-  const activeTask = tasks.find(task => task.isActive && !task.isCompleted) || null;
+
+  const toggleFocusMode = () => { setSettings(prev => ({ ...prev, focusModeEnabled: !prev.focusModeEnabled })); setShowMenu(false); };
+  const activeTask = tasks.find(t => t.isActive && !t.isCompleted) ?? null;
+
+  // ── Render guards ─────────────────────────────────────────
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
+      <div className="text-slate-400">Cargando...</div>
+    </div>
+  );
+
+  if (isSupabaseConfigured && !authUser) return <AuthScreen onAuth={handleAuth} />;
 
   return (
     <>
       <audio ref={audioRef} src={`${import.meta.env.BASE_URL}finish.mp3`} preload="auto" />
       <audio ref={alertAudioRef} src={`${import.meta.env.BASE_URL}yet.mp3`} preload="auto" />
-      <PauseReminderModal 
-        show={showPauseReminder} 
-        onConfirm={handleConfirmPause} 
-        onClose={handleSnoozePause} 
-        pauseDuration={settings.pauseDuration}
-      />
-      <SettingsModal
-        show={showSettingsModal}
-        onSave={handleSaveSettings}
-        onClose={handleCloseSettings}
-        initialWorkDay={workDay}
-      />
-      <AdvancedSettingsModal
-        show={showAdvancedSettings}
-        onSave={handleSaveAdvancedSettings}
-        onClose={handleCloseAdvancedSettings}
-        initialSettings={settings}
-      />
-      
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleImportData} 
-        style={{ display: 'none' }} 
-        accept=".json" 
-      />
-      
+      <PauseReminderModal show={showPauseReminder} onConfirm={handleConfirmPause} onClose={handleSnoozePause} pauseDuration={settings.pauseDuration} />
+      <SettingsModal show={showSettingsModal} onSave={handleSaveSettings} onClose={() => { if (workDay) setShowSettingsModal(false); }} initialWorkDay={workDay} />
+      <AdvancedSettingsModal show={showAdvancedSettings} onSave={handleSaveAdvancedSettings} onClose={() => setShowAdvancedSettings(false)} initialSettings={settings} />
+      <ProjectModal show={showProjectModal} onSave={handleSaveProject} onClose={() => { setShowProjectModal(false); setEditingProject(null); }} editing={editingProject} />
+      <DaySummaryModal show={showDaySummary} records={daySummaryRecords} projects={projects} onClose={() => setShowDaySummary(false)} />
+      <input type="file" ref={fileInputRef} onChange={handleImportData} style={{ display: 'none' }} accept=".json" />
+
       {settings.focusModeEnabled && activeTask ? (
-        <FocusMode 
-          task={activeTask} 
-          onToggle={handleToggleTask}
-          onComplete={handleCompleteTask}
-          onExitFocusMode={toggleFocusMode}
-          pomodoroTimer={settings.pomodoroTimer}
-        />
+        <FocusMode task={activeTask} onToggle={handleToggleTask} onComplete={handleCompleteTask} onExitFocusMode={toggleFocusMode} pomodoroTimer={settings.pomodoroTimer} />
       ) : (
         <main className="min-h-screen p-4 sm:p-8 bg-gradient-to-br from-slate-900 to-slate-800">
           <div className="max-w-3xl mx-auto">
@@ -368,144 +256,81 @@ const App: React.FC = () => {
                 <LogoEmpresas className="hover:scale-110 transition-transform" />
                 <h1 className="text-lg font-semibold mb-3">Chess Control</h1>
               </div>
+
+              {authUser && (
+                <div className="absolute top-0 left-0 flex items-center gap-2 px-3 py-1.5 bg-slate-800/60 border border-slate-600/30 rounded-xl text-xs text-slate-400">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  {authUser.email}
+                </div>
+              )}
+
               <div className="absolute top-0 right-0 flex items-center gap-3">
                 {isDayStarted && (
-                  <button 
-                    onClick={handleEndDay} 
-                    className="group flex items-center gap-2 px-4 py-2.5 bg-red-700 hover:bg-red-800 border border-red-600 text-white rounded-xl transition-all duration-300 font-medium text-sm shadow-lg hover:shadow-red-500/30"
-                    aria-label="End workday"
-                  >
-                    <LogOutIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200 text-white" />
+                  <button onClick={handleEndDay} className="flex items-center gap-2 px-4 py-2.5 bg-red-700 hover:bg-red-800 border border-red-600 text-white rounded-xl font-medium text-sm shadow-lg transition-all">
+                    <LogOutIcon className="w-5 h-5" />
                     <span className="hidden sm:inline">Finalizar Día</span>
                   </button>
                 )}
-                
                 {isDayStarted && (
-                  <button
-                    onClick={toggleFocusMode}
-                    className="group flex items-center gap-2 px-4 py-2.5 bg-lime-500 hover:bg-lime-600 border border-lime-400 text-slate-900 rounded-xl transition-all duration-300 font-medium text-sm shadow-lg hover:shadow-lime-500/30"
-                    aria-label="Focus mode"
-                  >
-                    <FocusIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200 text-slate-900" />
+                  <button onClick={toggleFocusMode} className="flex items-center gap-2 px-4 py-2.5 bg-lime-500 hover:bg-lime-600 border border-lime-400 text-slate-900 rounded-xl font-medium text-sm shadow-lg transition-all">
+                    <FocusIcon className="w-5 h-5" />
                     <span className="hidden sm:inline">Modo Enfoque</span>
                   </button>
                 )}
-                
                 {workDay && (
                   <div className="flex items-center gap-2">
-                    <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-800/60 backdrop-blur-sm border border-slate-600/30 rounded-xl">
-                      <button 
-                        onClick={handleExportData} 
-                        className="group p-2 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-all duration-200"
-                        aria-label="Export data"
-                        title="Exportar datos"
-                      >
-                        <DownloadIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+                    <div className="hidden md:flex items-center gap-2 px-3 py-2 bg-slate-800/60 border border-slate-600/30 rounded-xl">
+                      <button onClick={handleExportData} className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-lg transition-all" title="Exportar datos">
+                        <DownloadIcon className="w-5 h-5" />
                       </button>
-                      
-                      <button 
-                        onClick={triggerFileInput} 
-                        className="group p-2 text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-all duration-200"
-                        aria-label="Import data"
-                        title="Importar datos"
-                      >
-                        <UploadIcon className="w-5 h-5 group-hover:scale-110 transition-transform duration-200" />
+                      <button onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-all" title="Importar datos">
+                        <UploadIcon className="w-5 h-5" />
                       </button>
-                      
-                      <div className="w-px h-6 bg-slate-600/50"></div>
+                      <div className="w-px h-6 bg-slate-600/50" />
                     </div>
-                    
                     <div className="relative">
-                      <button
-                        onClick={() => setShowMenu(!showMenu)}
-                        className={`group p-3 rounded-xl transition-all duration-300 backdrop-blur-sm shadow-lg ${
-                          showMenu 
-                            ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 border border-cyan-400/40 text-cyan-200' 
-                            : 'bg-slate-800/60 border border-slate-600/30 text-slate-300 hover:bg-slate-700/60 hover:border-slate-500/40 hover:text-cyan-300'
-                        }`}
-                        aria-label="Menu"
-                        title="Menú"
-                      >
-                        <MenuIcon className={`w-6 h-6 transition-all duration-300 ${showMenu ? 'rotate-180 scale-110' : 'group-hover:scale-110'}`} />
+                      <button onClick={() => setShowMenu(!showMenu)} className={`p-3 rounded-xl transition-all backdrop-blur-sm shadow-lg ${showMenu ? 'bg-cyan-500/20 border border-cyan-400/40 text-cyan-200' : 'bg-slate-800/60 border border-slate-600/30 text-slate-300 hover:text-cyan-300'}`}>
+                        <MenuIcon className={`w-6 h-6 transition-all ${showMenu ? 'rotate-180' : ''}`} />
                       </button>
-                      
                       {showMenu && (
                         <>
-                          <div 
-                            className="fixed inset-0 z-10" 
-                            onClick={() => setShowMenu(false)}
-                          ></div>
-                          
-                          <div className="absolute right-0 top-full mt-3 w-64 bg-slate-800/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-600/30 py-2 z-20 animate-in slide-in-from-top-2 duration-200">
+                          <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                          <div className="absolute right-0 top-full mt-3 w-64 bg-slate-800/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-600/30 py-2 z-20">
                             <div className="px-4 py-2 border-b border-slate-600/20">
                               <h3 className="text-sm font-semibold text-slate-200">Acciones Rápidas</h3>
                             </div>
-                            
-                            <button
-                              onClick={() => {
-                                setShowMenu(false);
-                                handleExportData();
-                              }}
-                              className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-cyan-300 transition-colors duration-200 group"
-                            >
-                              <div className="flex items-center justify-center w-8 h-8 bg-cyan-500/10 rounded-lg mr-3 group-hover:bg-cyan-500/20 transition-colors duration-200">
-                                <DownloadIcon className="w-4 h-4 text-cyan-400" />
+                            <button onClick={() => { setShowMenu(false); setShowProjectModal(true); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-purple-300 transition-colors">
+                              <div className="flex items-center justify-center w-8 h-8 bg-purple-500/10 rounded-lg mr-3">
+                                <span className="text-purple-400 font-bold text-xs">P+</span>
                               </div>
-                              <div>
-                                <div className="font-medium">Exportar datos</div>
-                                <div className="text-xs text-slate-500">Descargar respaldo en JSON</div>
-                              </div>
+                              <div><div className="font-medium">Nuevo proyecto</div><div className="text-xs text-slate-500">Organizar tareas por proyecto</div></div>
                             </button>
-                            
-                            <button
-                              onClick={() => {
-                                setShowMenu(false);
-                                triggerFileInput();
-                              }}
-                              className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-emerald-300 transition-colors duration-200 group"
-                            >
-                              <div className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 rounded-lg mr-3 group-hover:bg-emerald-500/20 transition-colors duration-200">
-                                <UploadIcon className="w-4 h-4 text-emerald-400" />
-                              </div>
-                              <div>
-                                <div className="font-medium">Importar datos</div>
-                                <div className="text-xs text-slate-500">Cargar respaldo desde archivo</div>
-                              </div>
+                            <button onClick={() => { setShowMenu(false); handleExportData(); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-cyan-300 transition-colors">
+                              <div className="flex items-center justify-center w-8 h-8 bg-cyan-500/10 rounded-lg mr-3"><DownloadIcon className="w-4 h-4 text-cyan-400" /></div>
+                              <div><div className="font-medium">Exportar datos</div><div className="text-xs text-slate-500">Descargar respaldo en JSON</div></div>
                             </button>
-                            
-                            <div className="h-px bg-slate-600/20 mx-4 my-2"></div>
-                            
-                            <button
-                              onClick={() => {
-                                setShowAdvancedSettings(true);
-                                setShowMenu(false);
-                              }}
-                              className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-amber-300 transition-colors duration-200 group"
-                            >
-                              <div className="flex items-center justify-center w-8 h-8 bg-amber-500/10 rounded-lg mr-3 group-hover:bg-amber-500/20 transition-colors duration-200">
-                                <SettingsIcon className="w-4 h-4 text-amber-400" />
-                              </div>
-                              <div>
-                                <div className="font-medium">Configuración avanzada</div>
-                                <div className="text-xs text-slate-500">Personalizar comportamiento</div>
-                              </div>
+                            <button onClick={() => { setShowMenu(false); fileInputRef.current?.click(); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-emerald-300 transition-colors">
+                              <div className="flex items-center justify-center w-8 h-8 bg-emerald-500/10 rounded-lg mr-3"><UploadIcon className="w-4 h-4 text-emerald-400" /></div>
+                              <div><div className="font-medium">Importar datos</div><div className="text-xs text-slate-500">Cargar respaldo desde archivo</div></div>
                             </button>
-                            
-                            <button
-                              onClick={() => {
-                                setShowSettingsModal(true);
-                                setShowMenu(false);
-                              }}
-                              className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-blue-300 transition-colors duration-200 group"
-                            >
-                              <div className="flex items-center justify-center w-8 h-8 bg-blue-500/10 rounded-lg mr-3 group-hover:bg-blue-500/20 transition-colors duration-200">
-                                <SettingsIcon className="w-4 h-4 text-blue-400" />
-                              </div>
-                              <div>
-                                <div className="font-medium">Horario de trabajo</div>
-                                <div className="text-xs text-slate-500">Configurar horas laborales</div>
-                              </div>
+                            <div className="h-px bg-slate-600/20 mx-4 my-2" />
+                            <button onClick={() => { setShowAdvancedSettings(true); setShowMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-amber-300 transition-colors">
+                              <div className="flex items-center justify-center w-8 h-8 bg-amber-500/10 rounded-lg mr-3"><SettingsIcon className="w-4 h-4 text-amber-400" /></div>
+                              <div><div className="font-medium">Configuración avanzada</div><div className="text-xs text-slate-500">Personalizar comportamiento</div></div>
                             </button>
+                            <button onClick={() => { setShowSettingsModal(true); setShowMenu(false); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-blue-300 transition-colors">
+                              <div className="flex items-center justify-center w-8 h-8 bg-blue-500/10 rounded-lg mr-3"><SettingsIcon className="w-4 h-4 text-blue-400" /></div>
+                              <div><div className="font-medium">Horario de trabajo</div><div className="text-xs text-slate-500">Configurar horas laborales</div></div>
+                            </button>
+                            {authUser && (
+                              <>
+                                <div className="h-px bg-slate-600/20 mx-4 my-2" />
+                                <button onClick={() => { setShowMenu(false); handleLogout(); }} className="flex items-center w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-red-300 transition-colors">
+                                  <div className="flex items-center justify-center w-8 h-8 bg-red-500/10 rounded-lg mr-3"><LogOutIcon className="w-4 h-4 text-red-400" /></div>
+                                  <div><div className="font-medium">Cerrar sesión</div><div className="text-xs text-slate-500">{authUser.email}</div></div>
+                                </button>
+                              </>
+                            )}
                           </div>
                         </>
                       )}
@@ -515,18 +340,12 @@ const App: React.FC = () => {
               </div>
               <p className="text-slate-400">Controlador de reloj para productividad</p>
             </header>
-            
+
             {isDayStarted ? (
               <>
                 <StatsDisplay points={points} activePauses={activePauses} totalWorkTime={totalWorkTime} tasks={tasks} />
-                <TaskInput onAddTask={handleAddTask} />
-                <TaskList 
-                  tasks={tasks} 
-                  onToggle={handleToggleTask} 
-                  onComplete={handleCompleteTask} 
-                  onDelete={handleDeleteTask} 
-                  toleranceTime={settings.toleranceTime}
-                />
+                <TaskInput onAddTask={handleAddTask} projects={projects} onCreateProject={() => setShowProjectModal(true)} />
+                <TaskList tasks={tasks} onToggle={handleToggleTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} toleranceTime={settings.toleranceTime} projects={projects} />
               </>
             ) : (
               <StartDayScreen onStart={handleStartDay} />

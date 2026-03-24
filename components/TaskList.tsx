@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Task } from '../types';
+import { Task, Project } from '../types';
 import TaskItem from './TaskItem';
 
 interface TaskListProps {
@@ -9,9 +9,10 @@ interface TaskListProps {
   onComplete: (id: number) => void;
   onDelete: (id: number) => void;
   toleranceTime?: number;
+  projects?: Project[];
 }
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onComplete, onDelete, toleranceTime = 300 }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onComplete, onDelete, toleranceTime = 300, projects = [] }) => {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-10 px-4 bg-slate-800/50 rounded-lg">
@@ -24,13 +25,14 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onToggle, onComplete, onDele
   return (
     <div>
       {tasks.map(task => (
-        <TaskItem 
+        <TaskItem
           key={task.id}
           task={task}
           onToggle={onToggle}
           onComplete={onComplete}
           onDelete={onDelete}
           toleranceTime={toleranceTime}
+          project={projects.find(p => p.id === task.projectId)}
         />
       ))}
     </div>

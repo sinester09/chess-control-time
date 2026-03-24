@@ -67,7 +67,7 @@ export class TaskStorageService {
     }, false);
   }
 
-  async addTask(taskData: Pick<Task, 'name' | 'estimatedTime' | 'completedAt'>): Promise<Task | null> {
+  async addTask(taskData: Pick<Task, 'name' | 'estimatedTime' | 'completedAt' | 'projectId'>): Promise<Task | null> {
     const tasks = await this.getTasks();
     const newId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
 
