@@ -168,7 +168,7 @@ const App: React.FC = () => {
 
   const handleEndDay = async () => {
     if (!window.confirm('¿Finalizar jornada? Se guardarán las horas por proyecto.')) return;
-    const records = await timeRecordService.saveEndOfDay(userId, tasks);
+    const records = await timeRecordService.saveEndOfDay(userId, tasks, activePauses, settings.pauseDuration);
     setDaySummaryRecords(records);
     setIsDayStarted(false);
     setTasks(prev => prev.map(t => ({ ...t, isActive: false })));

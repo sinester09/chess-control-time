@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS time_records (
   date          DATE    NOT NULL,
   total_seconds INTEGER NOT NULL DEFAULT 0,
   task_count    INTEGER NOT NULL DEFAULT 0,
+  pause_count   INTEGER NOT NULL DEFAULT 0,  -- descansos tomados (en registro global)
+  pause_minutes INTEGER NOT NULL DEFAULT 0,  -- minutos totales de pausa
   created_at    BIGINT  NOT NULL
 );
 

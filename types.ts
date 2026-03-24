@@ -27,6 +27,8 @@ export interface TimeRecord {
   date: string; // YYYY-MM-DD
   totalSeconds: number;
   taskCount: number;
+  pauseCount: number;       // descansos tomados (solo en registro global, 0 en por-proyecto)
+  pauseMinutes: number;     // minutos totales de descanso
   createdAt: number;
 }
 

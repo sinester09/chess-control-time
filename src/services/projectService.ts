@@ -88,11 +88,17 @@ export const projectService = {
 // ── Time Records ─────────────────────────────────────────────
 
 export const timeRecordService = {
-  /** Builds time records from completed tasks and saves them */
-  async saveEndOfDay(userId: string, tasks: Task[]): Promise<TimeRecord[]> {
+  /** Builds time records from tasks + pause info and saves them */
+  async saveEndOfDay(
+    userId: string,
+    tasks: Task[],
+    pauseCount: number = 0,
+    pauseDurationMinutes: number = 0,
+  ): Promise<TimeRecord[]> {
     const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
 
-    // Group elapsed time by projectId (null = sin proyecto)
+    // Group elapsed time by projectId
     const groups: Record<string, { totalSeconds: number; taskCount: number }> = {};
     for (const task of tasks) {
       if (task.elapsedTime <= 0) continue;
@@ -109,27 +115,45 @@ export const timeRecordService = {
       date: today,
       totalSeconds: val.totalSeconds,
       taskCount: val.taskCount,
-      createdAt: Date.now(),
+      pauseCount: 0,
+      pauseMinutes: 0,
+      createdAt: now,
     }));
+
+    // Add a global summary record with pause info (always saved)
+    const summaryRecord: TimeRecord = {
+      id: generateId(),
+      userId,
+      projectId: null,
+      date: today,
+      totalSeconds: tasks.reduce((s, t) => s + (t.elapsedTime || 0), 0),
+      taskCount: tasks.filter(t => t.isCompleted).length,
+      pauseCount,
+      pauseMinutes: pauseCount * pauseDurationMinutes,
+      createdAt: now + 1, // slightly later so it sorts last
+    };
+
+    const allRecords = records.length > 0 ? [...records, summaryRecord] : [summaryRecord];
 
     // Save to cache
     const existing = cacheGet<TimeRecord[]>(RECORDS_KEY(userId), []);
-    cacheSet(RECORDS_KEY(userId), [...existing, ...records]);
+    cacheSet(RECORDS_KEY(userId), [...existing, ...allRecords]);
 
     // Save to Supabase
-    if (supabase && records.length > 0) {
+    if (supabase && allRecords.length > 0) {
       try {
         await supabase.from('time_records').insert(
-          records.map(r => ({
+          allRecords.map(r => ({
             id: r.id, user_id: r.userId, project_id: r.projectId,
             date: r.date, total_seconds: r.totalSeconds,
-            task_count: r.taskCount, created_at: r.createdAt,
+            task_count: r.taskCount, pause_count: r.pauseCount,
+            pause_minutes: r.pauseMinutes, created_at: r.createdAt,
           }))
         );
       } catch (err) { console.warn('[timeRecordService] saveEndOfDay:', err); }
     }
 
-    return records;
+    return allRecords;
   },
 
   async getRecords(userId: string, fromDate?: string): Promise<TimeRecord[]> {
@@ -141,11 +165,13 @@ export const timeRecordService = {
       if (error) throw error;
       return (data as Array<{
         id: string; user_id: string; project_id: string | null;
-        date: string; total_seconds: number; task_count: number; created_at: number;
+        date: string; total_seconds: number; task_count: number;
+        pause_count: number; pause_minutes: number; created_at: number;
       }>).map(r => ({
         id: r.id, userId: r.user_id, projectId: r.project_id,
         date: r.date, totalSeconds: r.total_seconds,
-        taskCount: r.task_count, createdAt: r.created_at,
+        taskCount: r.task_count, pauseCount: r.pause_count ?? 0,
+        pauseMinutes: r.pause_minutes ?? 0, createdAt: r.created_at,
       }));
     } catch {
       return cacheGet<TimeRecord[]>(RECORDS_KEY(userId), []);
