@@ -29,10 +29,11 @@ interface StatsDisplayProps {
   points: number;
   activePauses: number;
   totalWorkTime: number; // in seconds
-  tasks?: Task[]; // Lista de tareas opcional para mostrar estadísticas adicionales
+  pauseDuration: number; // in minutes (from settings)
+  tasks?: Task[];
 }
 
-const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, totalWorkTime, tasks = [] }) => {
+const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, totalWorkTime, pauseDuration, tasks = [] }) => {
   // Calcular estadísticas adicionales
   const completedTasks = tasks.filter(task => task.isCompleted).length;
   const totalTasks = tasks.length;
@@ -47,8 +48,7 @@ const StatsDisplay: React.FC<StatsDisplayProps> = ({ points, activePauses, total
     ? Math.round(completedTasksArray.reduce((sum, task) => sum + task.elapsedTime, 0) / completedTasksArray.length)
     : 0;
   
-  // Calcular tiempo de pausa estimado (asumiendo que cada pausa dura aproximadamente 15 minutos)
-  const estimatedPauseTime = activePauses * 15 * 60; // en segundos
+  const estimatedPauseTime = activePauses * pauseDuration * 60; // en segundos
 
   return (
     <div className="flex flex-col gap-4 mb-6">

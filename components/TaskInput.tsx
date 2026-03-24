@@ -53,16 +53,13 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
 
   return (
     <div className="mb-6">
-      {/* Header con selector de fechas */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Today's Tasks</h2>
-          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-            <div className="w-4 h-4 bg-purple-500 rounded-full"></div>
-          </div>
+      {/* Selector de fechas */}
+      <div className="bg-slate-800/60 backdrop-blur-sm rounded-2xl border border-slate-700 p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-200">Tareas del día</h2>
+          <CalendarIcon className="w-4 h-4 text-slate-400" />
         </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {dates.map((date, index) => {
             const dateInfo = formatDate(date);
             const isSelected = selectedDate.toDateString() === date.toDateString();
@@ -71,14 +68,16 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
               <button
                 key={index}
                 onClick={() => setSelectedDate(date)}
-                className={`flex-shrink-0 flex flex-col items-center p-3 rounded-xl transition-all duration-200 min-w-[60px] ${
-                  isSelected ? 'bg-purple-500 text-white shadow-lg scale-105'
-                    : isToday ? 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                className={`flex-shrink-0 flex flex-col items-center p-2.5 rounded-xl transition-all duration-200 min-w-[52px] ${
+                  isSelected
+                    ? 'bg-cyan-500 text-slate-900 shadow-lg shadow-cyan-500/30 scale-105'
+                    : isToday
+                    ? 'bg-slate-700 text-cyan-400 hover:bg-slate-600'
+                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
                 }`}
               >
                 <span className="text-xs font-medium opacity-75">{formatMonth(date)}</span>
-                <span className="text-lg font-bold">{dateInfo.main}</span>
+                <span className="text-lg font-bold leading-tight">{dateInfo.main}</span>
                 <span className="text-xs font-medium opacity-75">{dateInfo.sub}</span>
               </button>
             );
@@ -86,13 +85,14 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
         </div>
       </div>
 
+      {/* Botón añadir */}
       {!isExpanded && (
         <button
           onClick={() => setIsExpanded(true)}
-          className="w-full bg-white border-2 border-dashed border-gray-300 hover:border-purple-400 hover:bg-purple-50 rounded-2xl p-6 transition-all duration-200 group"
+          className="w-full bg-slate-800/40 border-2 border-dashed border-slate-600 hover:border-cyan-500/60 hover:bg-slate-800/70 rounded-2xl p-5 transition-all duration-200 group"
         >
-          <div className="flex items-center justify-center gap-3 text-gray-500 group-hover:text-purple-600">
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+          <div className="flex items-center justify-center gap-3 text-slate-400 group-hover:text-cyan-400">
+            <div className="w-9 h-9 bg-slate-700 group-hover:bg-cyan-500/20 rounded-full flex items-center justify-center transition-colors">
               <PlusIcon className="w-5 h-5" />
             </div>
             <span className="font-medium">Agregar nueva tarea</span>
@@ -100,63 +100,64 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
         </button>
       )}
 
+      {/* Formulario expandido */}
       {isExpanded && (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 space-y-4">
+        <div className="bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-700 p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Nueva Tarea</h3>
+            <h3 className="text-base font-semibold text-slate-100">Nueva Tarea</h3>
             <button
               onClick={() => setIsExpanded(false)}
-              className="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center transition-colors"
+              className="w-7 h-7 bg-slate-700 hover:bg-slate-600 rounded-full flex items-center justify-center transition-colors text-slate-400 hover:text-slate-200"
             >
-              <span className="text-gray-500">✕</span>
+              ✕
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Nombre */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Nombre de la tarea</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Nombre de la tarea</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ej: Revisar documentos del proyecto"
-                className="w-full bg-gray-50 border border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:bg-white rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all duration-200"
+                className="w-full bg-slate-700/60 border border-slate-600 hover:border-slate-500 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/30 focus:outline-none transition-all"
                 required
               />
             </div>
 
             {/* Tiempo estimado */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Tiempo estimado</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Tiempo estimado</label>
               <div className="relative">
                 <input
                   type="number"
                   value={minutes}
                   onChange={(e) => setMinutes(e.target.value)}
                   placeholder="30"
-                  className="w-full bg-gray-50 border border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:bg-white rounded-xl px-4 py-3 pr-20 text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all duration-200"
+                  className="w-full bg-slate-700/60 border border-slate-600 hover:border-slate-500 focus:border-cyan-500 rounded-xl px-4 py-2.5 pr-16 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500/30 focus:outline-none transition-all"
                   min="1"
                   required
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-gray-500">
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400 pointer-events-none">
                   <ClockIcon className="w-4 h-4" />
-                  <span className="text-sm font-medium">min</span>
+                  <span className="text-sm">min</span>
                 </div>
               </div>
             </div>
 
             {/* Proyecto */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Proyecto</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-slate-300">Proyecto</label>
               <div className="flex gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setSelectedProjectId(null)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                     selectedProjectId === null
-                      ? 'bg-gray-200 border-gray-400 text-gray-800'
-                      : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                      ? 'bg-slate-500 border-slate-400 text-slate-100'
+                      : 'bg-slate-700/50 border-slate-600 text-slate-400 hover:bg-slate-700'
                   }`}
                 >
                   Sin proyecto
@@ -166,10 +167,10 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
                     key={p.id}
                     type="button"
                     onClick={() => setSelectedProjectId(p.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                       selectedProjectId === p.id
                         ? 'border-transparent text-white'
-                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'
+                        : 'bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-700'
                     }`}
                     style={selectedProjectId === p.id ? { backgroundColor: p.color, borderColor: p.color } : {}}
                   >
@@ -180,45 +181,45 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, projects, onCreateProj
                 <button
                   type="button"
                   onClick={onCreateProject}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-dashed border-gray-300 text-gray-400 hover:border-purple-400 hover:text-purple-500 transition-all"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-dashed border-slate-600 text-slate-500 hover:border-cyan-500/60 hover:text-cyan-400 transition-all"
                 >
                   + Nuevo proyecto
                 </button>
               </div>
 
               {selectedProject && (
-                <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: `${selectedProject.color}15` }}>
+                <div className="flex items-center gap-2 p-2 rounded-lg mt-1" style={{ backgroundColor: `${selectedProject.color}1A` }}>
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedProject.color }} />
-                  <span className="text-sm font-medium" style={{ color: selectedProject.color }}>{selectedProject.name}</span>
+                  <span className="text-xs font-medium" style={{ color: selectedProject.color }}>{selectedProject.name}</span>
                 </div>
               )}
             </div>
 
-            {/* Fecha */}
-            <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-200">
-              <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                <CalendarIcon className="w-4 h-4 text-white" />
+            {/* Fecha seleccionada */}
+            <div className="flex items-center gap-3 p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
+              <div className="w-7 h-7 bg-cyan-500/20 rounded-full flex items-center justify-center">
+                <CalendarIcon className="w-4 h-4 text-cyan-400" />
               </div>
               <div>
-                <span className="text-sm text-purple-600 font-medium">Programada para:</span>
-                <p className="text-purple-900 font-semibold">
+                <span className="text-xs text-cyan-400 font-medium">Programada para:</span>
+                <p className="text-slate-200 text-sm font-semibold">
                   {selectedDate.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </p>
               </div>
             </div>
 
             {/* Acciones */}
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => setIsExpanded(false)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-6 rounded-xl transition-colors duration-200"
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-2.5 px-4 rounded-xl transition-colors"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg"
+                className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-slate-900 font-semibold py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-cyan-500/20"
               >
                 <div className="flex items-center justify-center gap-2">
                   <PlusIcon className="w-4 h-4" />

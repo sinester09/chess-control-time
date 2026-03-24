@@ -11,8 +11,8 @@ const formatTime = (totalSeconds: number): string => {
 
 interface FocusModeProps {
   task: Task;
-  onToggle: (taskId: string) => void;
-  onComplete: (taskId: string) => void;
+  onToggle: (taskId: number) => void;
+  onComplete: (taskId: number) => void;
   onExitFocusMode: () => void;
   pomodoroTimer: number; // en minutos
 }

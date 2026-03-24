@@ -21,7 +21,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
 
   if (!show) return null;
 
+  const isValid = startTime < endTime;
+
   const handleSave = () => {
+    if (!isValid) return;
     onSave(startTime, endTime);
   };
 
@@ -53,7 +56,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
             />
           </div>
         </div>
-        <div className="mt-8 flex justify-end gap-4">
+        {!isValid && (
+          <p className="mt-4 text-red-400 text-sm">La hora de inicio debe ser antes de la hora de término.</p>
+        )}
+        <div className="mt-4 flex justify-end gap-4">
           <button
             onClick={onClose}
             className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
@@ -64,7 +70,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ show, onSave, onClose, in
           </button>
           <button
             onClick={handleSave}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-6 rounded-lg transition"
+            disabled={!isValid}
+            className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-2 px-6 rounded-lg transition"
           >
             Guardar Horario
           </button>

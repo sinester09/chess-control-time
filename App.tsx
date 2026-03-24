@@ -343,7 +343,7 @@ const App: React.FC = () => {
 
             {isDayStarted ? (
               <>
-                <StatsDisplay points={points} activePauses={activePauses} totalWorkTime={totalWorkTime} tasks={tasks} />
+                <StatsDisplay points={points} activePauses={activePauses} totalWorkTime={totalWorkTime} pauseDuration={settings.pauseDuration} tasks={tasks} />
                 <TaskInput onAddTask={handleAddTask} projects={projects} onCreateProject={() => setShowProjectModal(true)} />
                 <TaskList tasks={tasks} onToggle={handleToggleTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} toleranceTime={settings.toleranceTime} projects={projects} />
               </>
